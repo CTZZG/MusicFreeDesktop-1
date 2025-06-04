@@ -1,8 +1,8 @@
 import type { Configuration } from "webpack";
 import path from "path";
-
 import { rules } from "./webpack.rules";
-import { plugins } from "./webpack.plugins";
+import { plugins as forgePlugins } from "./webpack.plugins";
+import CopyWebpackPlugin from "copy-webpack-plugin";
 
 rules.push(
   {
@@ -48,7 +48,17 @@ export const rendererConfig: Configuration = {
   module: {
     rules,
   },
-  plugins,
+  plugins: [
+    ...forgePlugins,
+    new CopyWebpackPlugin({
+      patterns: [
+        {
+          from: path.resolve(__dirname, "../src/renderer/document/vendor"),
+          to: "vendor",
+        },
+      ],
+    }),
+  ],
   resolve: {
     extensions: [".js", ".ts", ".jsx", ".tsx", ".css", ".scss"],
     alias: {

@@ -15,10 +15,18 @@ import voidCallback from "@/common/void-callback";
 import { IAudioController } from "@/types/audio-controller";
 import Promise = Dexie.Promise;
 
+declare var AV: any;
+
+interface IInternalSetTrackOptions {
+    seekTo?: number;
+    autoPlay?: boolean; // 新增 autoPlay 选项
+}
 
 class AudioController extends ControllerBase implements IAudioController {
     private audio: HTMLAudioElement;
     private hls: Hls;
+    private alacPlayer: any | null = null;
+    private activePlayerType: 'native' | 'hls' | 'alac' | null = null;
 
     private _playerState: PlayerState = PlayerState.None;
     get playerState() {
@@ -29,7 +37,6 @@ class AudioController extends ControllerBase implements IAudioController {
             this.onPlayerStateChanged?.(value);
         }
         this._playerState = value;
-
     }
 
     public musicItem: IMusic.IMusicItem | null = null;
@@ -55,7 +62,7 @@ class AudioController extends ControllerBase implements IAudioController {
             navigator.mediaSession.playbackState = "paused";
         }
 
-        this.audio.onerror = (event) => {
+        this.audio.onerror = (event) => { // Default error handler, will be overridden in tryNativePlayback
             this.playerState = PlayerState.Paused;
             navigator.mediaSession.playbackState = "paused";
             this.onError?.(ErrorReason.EmptyResource, event as any);
@@ -67,14 +74,6 @@ class AudioController extends ControllerBase implements IAudioController {
                 duration: this.audio.duration, // 缓冲中是Infinity
             });
         }
-
-        // this.audio.onseeking = () => {
-        //     this.playerState = PlayerState.Buffering;
-        // }
-        //
-        // this.audio.onseeked = () => {
-        //     this.playerState = PlayerState.Playing;
-        // }
 
         this.audio.onended = () => {
             this.playerState = PlayerState.Paused;
@@ -89,9 +88,15 @@ class AudioController extends ControllerBase implements IAudioController {
             this.onSpeedChange?.(this.audio.playbackRate);
         }
 
-
         // @ts-ignore  isDev
         window.ad = this.audio;
+    }
+
+    private destroyAlacPlayer(): void {
+        if (this.alacPlayer) {
+            this.alacPlayer.stop();
+            this.alacPlayer = null;
+        }
     }
 
     private initHls(config?: Partial<HlsConfig>) {
@@ -116,16 +121,25 @@ class AudioController extends ControllerBase implements IAudioController {
     destroy(): void {
         this.destroyHls();
         this.reset();
+        this.destroyAlacPlayer();
     }
 
     pause(): void {
-        if (this.hasSource) {
-            this.audio.pause()
+        if (this.alacPlayer && this.activePlayerType === 'alac') {
+            this.alacPlayer.pause();
+            this.playerState = PlayerState.Paused;
+            navigator.mediaSession.playbackState = "paused";
+        } else if (this.activePlayerType === 'native' || this.activePlayerType === 'hls') {
+            this.audio.pause();
         }
     }
 
     play(): void {
-        if (this.hasSource) {
+        if (this.alacPlayer && this.activePlayerType === 'alac') {
+            this.alacPlayer.play();
+            this.playerState = PlayerState.Playing;
+            navigator.mediaSession.playbackState = "playing";
+        } else if (this.activePlayerType === 'native' || this.activePlayerType === 'hls') {
             this.audio.play().catch(voidCallback);
         }
     }
@@ -136,14 +150,32 @@ class AudioController extends ControllerBase implements IAudioController {
         this.audio.removeAttribute("src");
         navigator.mediaSession.metadata = null;
         navigator.mediaSession.playbackState = "none";
+        this.destroyHls();
+        this.destroyAlacPlayer();
+        this.activePlayerType = null;
     }
 
     seekTo(seconds: number): void {
-        if (this.hasSource && isFinite(seconds)) {
+        if (this.alacPlayer && this.activePlayerType === 'alac') {
+            if (isFinite(seconds)) {
+                const wasPlaying = this.playerState === PlayerState.Playing;
+                if (wasPlaying) {
+                    this.alacPlayer.pause(); // 先暂停，避免seek时音频混乱
+                }
+                this.playerState = PlayerState.Buffering; // 进入缓冲状态
+                navigator.mediaSession.playbackState = "paused"; // 或者 "buffering" 如果支持
+
+                this.alacPlayer.seek(seconds * 1000); // Aurora.js Player 的 seek 方法通常接受毫秒
+                
+                if (wasPlaying) {
+                    this.alacPlayer.play(); // 指示播放器在缓冲好后播放
+                    // playerState 会在 progress 事件中转为 Playing
+                }
+            }
+        } else if (this.hasSource && isFinite(seconds)) { // 原生 audio 或 HLS
             const duration = this.audio.duration;
             this.audio.currentTime = Math.min(
-                seconds,
-                isNaN(duration) ? Infinity : duration
+                seconds, isNaN(duration) ? Infinity : duration
             );
         }
     }
@@ -164,7 +196,6 @@ class AudioController extends ControllerBase implements IAudioController {
     prepareTrack(musicItem: IMusic.IMusicItem) {
         this.musicItem = { ...musicItem };
 
-        // 1. update metadata
         navigator.mediaSession.metadata = new MediaMetadata({
             title: musicItem.title,
             artist: musicItem.artist,
@@ -176,35 +207,44 @@ class AudioController extends ControllerBase implements IAudioController {
             ],
         });
 
-        // 2. reset track
         this.playerState = PlayerState.None;
         this.audio.src = "";
         this.audio.removeAttribute("src");
+        this.destroyHls();
+        this.destroyAlacPlayer();
+        this.activePlayerType = null;
         navigator.mediaSession.playbackState = "none";
     }
 
-    setTrackSource(trackSource: IMusic.IMusicSource, musicItem: IMusic.IMusicItem): void {
+    setTrackSource(trackSource: IMusic.IMusicSource, musicItem: IMusic.IMusicItem, options?: IInternalSetTrackOptions): void {
         this.musicItem = { ...musicItem };
 
-        // 1. update metadata
         navigator.mediaSession.metadata = new MediaMetadata({
             title: musicItem.title,
             artist: musicItem.artist,
             album: musicItem.album,
-            artwork: [
-                {
-                    src: musicItem.artwork ?? albumImg,
-                },
-            ],
+            artwork: [{ src: musicItem.artwork ?? albumImg }],
         });
+        
+        if (!trackSource || !trackSource.url) {
+            this.onError(ErrorReason.EmptyResource, new Error("trackSource or trackSource.url is empty"));
+            this.reset();
+            return;
+        }
 
-
-        // 2. convert url and headers
         let url = trackSource.url;
-        const urlObj = new URL(trackSource.url);
+        let urlObj: URL;
+        try {
+            urlObj = new URL(trackSource.url);
+        } catch (e) {
+            this.onError(ErrorReason.EmptyResource, new Error(`Invalid trackSource.url: ${trackSource.url}. Error: ${(e as Error).message}`));
+            this.reset();
+            return;
+        }
+
+
         let headers: Record<string, any> | null = null;
 
-        // 2.1 convert user agent
         if (trackSource.headers || trackSource.userAgent) {
             headers = { ...(trackSource.headers ?? {}) };
             if (trackSource.userAgent) {
@@ -212,68 +252,150 @@ class AudioController extends ControllerBase implements IAudioController {
             }
         }
 
-        // 2.2 convert auth header
         if (urlObj.username && urlObj.password) {
-            const authHeader = `Basic ${btoa(
-                `${decodeURIComponent(urlObj.username)}:${decodeURIComponent(
-                    urlObj.password
-                )}`
-            )}`;
+            const authHeader = `Basic ${btoa(`${decodeURIComponent(urlObj.username)}:${decodeURIComponent(urlObj.password)}`)}`;
             urlObj.username = "";
             urlObj.password = "";
-            headers = {
-                ...(headers || {}),
-                Authorization: authHeader,
-            }
+            headers = { ...(headers || {}), Authorization: authHeader };
             url = urlObj.toString();
         }
-
-        // 2.3 hack url with headers
-        if (headers) {
-            const forwardedUrl = ServiceManager.RequestForwarderService.forwardRequest(url, "GET", headers);
-            if (forwardedUrl) {
-                url = forwardedUrl;
-                headers = null;
-            } else if (!headers["Authorization"]) {
-                url = encodeUrlHeaders(url, headers);
-                headers = null;
-            }
+        
+        let processedUrl: string;
+        try {
+            processedUrl = headers ? ServiceManager.RequestForwarderService.forwardRequest(url, "GET", headers) || encodeUrlHeaders(url, headers) : url;
+        } catch (e) {
+            this.onError(ErrorReason.EmptyResource, new Error(`Error processing URL headers: ${(e as Error).message}`));
+            this.reset();
+            return;
         }
-
-        if (!url) {
-            this.onError(ErrorReason.EmptyResource, new Error("url is empty"));
+        
+        if (!processedUrl) {
+            this.onError(ErrorReason.EmptyResource, new Error("processedUrl is empty after header processing"));
+            this.reset();
             return;
         }
 
-        // 3. set real source
-        if (getUrlExt(trackSource.url) === ".m3u8") {
-            if (Hls.isSupported()) {
-                this.initHls();
-                this.hls.loadSource(url);
-            } else {
-                this.onError(ErrorReason.UnsupportedResource);
-                return;
-            }
-        } else if (headers) {
-            fetch(url, {
-                method: "GET",
-                headers: {
-                    ...trackSource.headers,
-                },
-            })
-                .then(async (res) => {
-                    const blob = await res.blob();
-                    if (isSameMedia(this.musicItem, musicItem)) {
-                        this.audio.src = URL.createObjectURL(blob);
-                    }
-                });
+        this.destroyHls();
+        this.destroyAlacPlayer();
+        this.audio.removeAttribute("src");
+        this.audio.onerror = null; 
+        
+        const sourceUrlExt = getUrlExt(trackSource.url);
+
+        if (sourceUrlExt === ".m3u8") {
+            this.tryHlsPlayback(processedUrl, options);
         } else {
-            this.audio.src = url;
+            this.tryNativePlayback(processedUrl, musicItem, trackSource, options);
         }
     }
 
     setVolume(volume: number): void {
         this.audio.volume = volume;
+        if (this.alacPlayer && this.activePlayerType === 'alac') {
+            this.alacPlayer.volume = Math.round(volume * 100);
+        }
+    }
+
+    private tryNativePlayback(url: string, musicItem: IMusic.IMusicItem, originalTrackSource: IMusic.IMusicSource, options?: IInternalSetTrackOptions) {
+        this.activePlayerType = 'native';
+        this.audio.onerror = (event) => {
+            console.warn("Native playback failed, trying ALAC.js for:", musicItem.title, event);
+            if (this.activePlayerType === 'native') { 
+                this.playerState = PlayerState.Paused;
+                navigator.mediaSession.playbackState = "paused";
+                this.tryAlacPlayback(url, musicItem, originalTrackSource, options); 
+            }
+        };
+        this.audio.src = url;
+        if (options && options.autoPlay) { // 修改了这里
+           this.audio.play().catch(e => { 
+               console.warn("Native audio.play() rejected immediately:", e);
+               if (this.activePlayerType === 'native') { 
+                   this.tryAlacPlayback(url, musicItem, originalTrackSource, options);
+               }
+           });
+        }
+    }
+
+    private tryHlsPlayback(url: string, options?: IInternalSetTrackOptions) {
+        if (Hls.isSupported()) {
+            this.activePlayerType = 'hls';
+            this.initHls();
+            this.hls.loadSource(url);
+            if (options?.autoPlay) {
+                this.audio.play().catch(voidCallback); 
+            }
+        } else {
+            this.onError(ErrorReason.UnsupportedResource, new Error("HLS not supported"));
+        }
+    }
+
+    private tryAlacPlayback(url: string, musicItem: IMusic.IMusicItem, originalTrackSource: IMusic.IMusicSource, options?: IInternalSetTrackOptions) {
+        if (typeof AV === 'undefined' || !AV.Decoder.find('alac')) {
+            this.onError(ErrorReason.UnsupportedResource, new Error("ALAC.js or AV not available."));
+            this.activePlayerType = null;
+            return;
+        }
+
+        try {
+            this.activePlayerType = 'alac';
+            const asset = AV.Asset.fromURL(url); 
+            this.alacPlayer = new AV.Player(asset);
+
+            this.alacPlayer.on('progress', (durationPlayedMs: number) => {
+                try {
+                    if (this.alacPlayer && this.activePlayerType === 'alac') {
+                        const totalDurationMs = this.alacPlayer.asset && typeof this.alacPlayer.asset.duration === 'number' ? this.alacPlayer.asset.duration : Infinity;
+                        this.onProgressUpdate?.({
+                            currentTime: durationPlayedMs / 1000,
+                            duration: totalDurationMs / 1000,
+                        });
+                        // 如果之前是缓冲状态，现在收到progress，说明开始播放了
+                        if (this.playerState === PlayerState.Buffering) {
+                            this.playerState = PlayerState.Playing;
+                            navigator.mediaSession.playbackState = "playing";
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error in ALAC progress callback:", e);
+                }
+            });
+
+            this.alacPlayer.on('error', (err: any) => {
+                try {
+                    if (this.activePlayerType === 'alac') {
+                        this.onError?.(ErrorReason.UnsupportedResource, err);
+                        this.playerState = PlayerState.Paused;
+                        navigator.mediaSession.playbackState = "paused";
+                        this.activePlayerType = null; 
+                    }
+                } catch (e) {
+                    console.error("Error in ALAC error callback:", e);
+                }
+            });
+
+            this.alacPlayer.on('end', () => {
+                try {
+                    if (this.activePlayerType === 'alac') {
+                        this.playerState = PlayerState.Paused;
+                        this.onEnded?.();
+                    }
+                } catch (e) {
+                    console.error("Error in ALAC end callback:", e);
+                }
+            });
+            
+            if (options?.autoPlay) {
+                this.alacPlayer.play(); 
+                // 初始播放时，也先设置为Buffering，由progress事件转为Playing
+                this.playerState = PlayerState.Buffering;
+                navigator.mediaSession.playbackState = "paused"; // 或者 "buffering"
+            }
+
+        } catch (e) {
+            this.onError?.(ErrorReason.UnsupportedResource, e as Error);
+            this.activePlayerType = null;
+        }
     }
 }
 

@@ -785,7 +785,7 @@ class TrackPlayer {
         autoPlay: true
     }) {
         this.resetProgress();
-        this.audioController.setTrackSource(mediaSource, musicItem);
+        this.audioController.setTrackSource(mediaSource, musicItem, { autoPlay: options.autoPlay, seekTo: options.seekTo });
 
         if (options.seekTo >= 0) {
             this.audioController.seekTo(options.seekTo);

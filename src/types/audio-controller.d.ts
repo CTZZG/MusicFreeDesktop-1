@@ -1,6 +1,11 @@
 import {PlayerState} from "@/common/constant";
 import {CurrentTime, ErrorReason} from "@renderer/core/track-player/enum";
 
+export interface IInternalSetTrackOptions { // 与 audio-controller.ts 中定义一致
+    seekTo?: number;
+    autoPlay?: boolean;
+}
+
 export interface IAudioController {
     // 是否有音源
     hasSource: boolean;
@@ -13,7 +18,7 @@ export interface IAudioController {
     prepareTrack?(musicItem: IMusic.IMusicItem): void;
 
     // 设置音源
-    setTrackSource(trackSource: IMusic.IMusicSource, musicItem: IMusic.IMusicItem): void;
+    setTrackSource(trackSource: IMusic.IMusicSource, musicItem: IMusic.IMusicItem, options?: IInternalSetTrackOptions): void;
 
     // 暂停
     pause(): void;
@@ -55,4 +60,3 @@ export interface IAudioController {
     onSpeedChange?: (speed: number) => void;
 
 }
-

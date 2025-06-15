@@ -41,22 +41,30 @@ class MpvController extends EventEmitter<MpvEvents> {
     private isStopping = false;
 
     // [新增] 预加载方法，加载但不播放
-    public load(url: string) {
-        this.currentUrl = url;
+    public async load(url: string) {
+        if (this.mpvProcess && !(await this.healthCheck())) {
+            await this.recover();
+        }
         if (!this.mpvProcess) {
             this.startMpvProcess();
         }
+
+        this.currentUrl = url;
         // [修复] 分解为两个正确的命令：先加载，再暂停
         this.sendCommand(['loadfile', url, 'replace']).catch(e => console.error("loadfile failed:", e));
         this.sendCommand(['set_property', 'pause', true]).catch(e => console.error("set pause after load failed:", e));
         this.applyLoopProperty(); // 确保预加载后也应用循环属性
     }
 
-    public play(url: string) {
-        this.currentUrl = url;
+    public async play(url: string) {
+        if (this.mpvProcess && !(await this.healthCheck())) {
+            await this.recover();
+        }
         if (!this.mpvProcess) {
             this.startMpvProcess();
         }
+
+        this.currentUrl = url;
         // Use `loadfile` which is more robust for changing tracks and looping.
         this.sendCommand(['loadfile', url, 'replace']).catch(e => console.error("loadfile failed:", e));
         this.applyLoopProperty(); // 每次播放新歌曲时，都重新应用循环属性
@@ -154,30 +162,66 @@ class MpvController extends EventEmitter<MpvEvents> {
         }
         return new Promise((resolve, reject) => {
             if (!this.socket || this.socket.destroyed) {
-                // If we are trying to send a command but the socket is dead, queue it.
-                // This can happen during reconnection attempts.
                 if (!isInternal) this.commandQueue.push(command);
                 return reject(new Error('MPV socket is not connected.'));
             }
+
             const requestId = this.requestIdCounter++;
             const payload = { command, request_id: requestId };
-            this.commandCallbacks.set(requestId, (err, data) => err ? reject(new Error(err)) : resolve(data));
+
+            const timeout = setTimeout(() => {
+                if (this.commandCallbacks.has(requestId)) {
+                    this.commandCallbacks.delete(requestId);
+                    reject(new Error(`Command timed out: ${command[0]}`));
+                }
+            }, 3000); // 3-second timeout
+
+            this.commandCallbacks.set(requestId, (err, data) => {
+                clearTimeout(timeout);
+                err ? reject(new Error(err)) : resolve(data);
+            });
+
             this.socket.write(JSON.stringify(payload) + '\n');
         });
     }
 
-    public togglePause = () => this.sendCommand(['cycle', 'pause']).catch(e => console.error("togglePause failed:", e));
-    public seek = (seconds: number) => this.sendCommand(['set_property', 'time-pos', seconds]).catch(e => console.error("seek failed:", e));
-    public setVolume = (level: number) => this.sendCommand(['set_property', 'volume', level]).catch(e => console.error("setVolume failed:", e));
-    public setSpeed = (speed: number) => this.sendCommand(['set_property', 'speed', speed]).catch(e => console.error("setSpeed failed:", e));
+    public async togglePause() {
+        if (this.mpvProcess && !(await this.healthCheck())) {
+            await this.recover();
+        }
+        // If process was recovered, a new one will be started by the next command that needs it.
+        // If no process, queueing will handle it.
+        this.sendCommand(['cycle', 'pause']).catch(e => console.error("togglePause failed:", e));
+    }
+    public async seek(seconds: number) {
+        if (this.mpvProcess && !(await this.healthCheck())) {
+            await this.recover();
+        }
+        this.sendCommand(['set_property', 'time-pos', seconds]).catch(e => console.error("seek failed:", e));
+    }
+    public async setVolume(level: number) {
+        if (this.mpvProcess && !(await this.healthCheck())) {
+            await this.recover();
+        }
+        this.sendCommand(['set_property', 'volume', level]).catch(e => console.error("setVolume failed:", e));
+    }
+    public async setSpeed(speed: number) {
+        if (this.mpvProcess && !(await this.healthCheck())) {
+            await this.recover();
+        }
+        this.sendCommand(['set_property', 'speed', speed]).catch(e => console.error("setSpeed failed:", e));
+    }
     // [修改] setLoop 只更新内部状态，由 play/load 方法去应用
-    public setLoop = (enable: boolean) => {
+    public async setLoop(enable: boolean) {
+        if (this.mpvProcess && !(await this.healthCheck())) {
+            await this.recover();
+        }
         this.loop = enable;
         // 如果已经有音乐在播放，则立即应用循环属性
         if (this.currentUrl) {
             this.applyLoopProperty();
         }
-    };
+    }
 
     private applyLoopProperty() {
         const loopValue = this.loop ? 'inf' : 'no';
@@ -185,7 +229,25 @@ class MpvController extends EventEmitter<MpvEvents> {
     }
 
 
-    public stop() {
+    private async healthCheck(): Promise<boolean> {
+        try {
+            await this.sendCommand(['get_property', 'pid'], true);
+            return true;
+        } catch (error) {
+            console.error('Health check failed:', error.message);
+            return false;
+        }
+    }
+
+    private async recover() {
+        console.log('MPV process is unresponsive. Recovering...');
+        // Only job is to clean up the dead process.
+        // The calling method will handle starting a new one.
+        await this.stop();
+    }
+
+
+    public async stop() {
         if (this.isStopping) return;
         this.isStopping = true;
         console.log('MpvController stop called.');

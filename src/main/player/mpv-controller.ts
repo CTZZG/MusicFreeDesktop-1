@@ -76,7 +76,8 @@ class MpvController extends EventEmitter<MpvEvents> {
         ];
 
         try {
-            this.mpvProcess = spawn('mpv', args, { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
+            const command = process.platform === 'win32' ? 'mpv.exe' : 'mpv';
+            this.mpvProcess = spawn(command, args, { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
             this.emit('state-change', PlayerState.Buffering);
 
             this.mpvProcess.on('error', this.handleProcessError);
@@ -185,32 +186,20 @@ class MpvController extends EventEmitter<MpvEvents> {
 
 
     public stop() {
-        if (this.isStopping) {
-            return;
-        }
+        if (this.isStopping) return;
         this.isStopping = true;
         console.log('MpvController stop called.');
 
         this.isReady = false;
         this.currentUrl = null;
+
         if (this.socket && !this.socket.destroyed) {
             this.socket.end();
         }
 
-        try {
-            if (process.platform === "win32") {
-                console.log('Force killing all mpv processes on Windows...');
-                // 使用 stdio: 'ignore' 来抑制所有输出，避免编码问题和因“进程未找到”引发的 execSync 错误
-                execSync('taskkill /F /IM mpv.exe /T', { stdio: 'ignore' });
-                execSync('taskkill /F /IM mpv.com /T', { stdio: 'ignore' });
-            } else { // macOS and Linux
-                console.log(`Force killing all mpv processes on ${process.platform}.`);
-                execSync('pkill -9 mpv', { stdio: 'ignore' });
-            }
-            console.log('Kill commands executed.');
-        } catch (e) {
-            // 现在，只有在命令本身（如 taskkill）不存在时才会捕获到错误
-            console.error(`Execution of kill command failed: ${e.message}`);
+        if (this.mpvProcess && !this.mpvProcess.killed) {
+            console.log(`Killing mpv.exe process with PID: ${this.mpvProcess.pid}`);
+            this.mpvProcess.kill();
         }
 
         this.commandQueue = [];

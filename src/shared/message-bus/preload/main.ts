@@ -87,15 +87,7 @@ function onCommand<K extends keyof ICommand>(
 }
 
 function sendCommand<K extends keyof ICommand>(command: K, data: ICommand[K]) {
-  ee.emit(
-    "command",
-    {
-      command: command,
-      data: data,
-      timestamp: Date.now(),
-    },
-    -1
-  );
+  ipcRenderer.send("@shared/message-bus/command", { command, data });
 }
 
 function syncAppState(appState: IAppState, to?: "main" | number) {

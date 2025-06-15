@@ -21,6 +21,7 @@ class MessageBus {
     private ee = new EventEmitter<{
         stateChanged: [IAppState, IAppState]
     }>();
+    private commandEE = new EventEmitter();
 
     public setup(windowManager: IWindowManager) {
         this.windowManager = windowManager;
@@ -43,10 +44,37 @@ class MessageBus {
             };
             this.ee.emit("stateChanged", this.appState, data);
         })
+
+        ipcMain.on("@shared/message-bus/command", (_, { command, data }) => {
+            this.commandEE.emit(command, data);
+        })
     }
 
     public onAppStateChange(cb: (state: IAppState, changedAppState: IAppState) => void) {
         this.ee.on("stateChanged", cb);
+    }
+
+    public onCommand<T extends keyof ICommand>(command: T, cb: (data: ICommand[T]) => void) {
+        this.commandEE.on(command, cb);
+    }
+
+    public syncAppState(patch: Partial<IAppState>) {
+        this.appState = {
+            ...this.appState,
+            ...patch,
+        };
+        this.ee.emit("stateChanged", this.appState, patch);
+
+        const allWindows = this.windowManager.getAllWindows();
+        for(const bWindow of allWindows) {
+            bWindow.webContents.send("@shared/message-bus/message", {
+                type: "app-state-changed",
+                payload: {
+                    patch,
+                },
+                timestamp: Date.now()
+            });
+        }
     }
 
     /**

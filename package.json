@@ -12,7 +12,9 @@
     "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx,.js ./src --fix",
     "lint-staged": "lint-staged",
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "postinstall": "node scripts/install-mpv.js",
+    "install-mpv": "node scripts/manual-install-mpv.js"
   },
   "keywords": [],
   "author": {
@@ -75,6 +77,7 @@
     "axios": "1.7.4",
     "better-sqlite3": "^10.0.0",
     "big-integer": "^1.6.52",
+    "chalk": "^5.4.1",
     "cheerio": "^1.0.0-rc.12",
     "chokidar": "^3.6.0",
     "color": "^4.2.3",
@@ -99,6 +102,7 @@
     "music-metadata": "^8.3.0",
     "nanoid": "^4.0.2",
     "object-path": "^0.11.8",
+    "ora": "^8.1.1",
     "p-queue": "^7.4.1",
     "qs": "^6.12.1",
     "rc-slider": "^10.6.2",
@@ -114,6 +118,7 @@
     "sharp": "^0.32.6",
     "socket.io": "^4.7.5",
     "unzipper": "^0.11.6",
-    "webdav": "^5.6.0"
+    "webdav": "^5.6.0",
+    "which": "^4.0.0"
   }
 }

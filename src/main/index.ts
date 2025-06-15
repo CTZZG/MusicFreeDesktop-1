@@ -11,6 +11,7 @@ import ThumbBarUtil from "@/common/main/thumb-bar-util";
 import windowManager from "@main/window-manager";
 import AppConfig from "@shared/app-config/main";
 import TrayManager from "@main/tray-manager";
+import mpvController from './player/mpv-controller'; // [新增] 引入
 import WindowDrag from "@shared/window-drag/main";
 import {IAppConfig} from "@/types/app-config";
 import axios from "axios";
@@ -88,7 +89,12 @@ app.on("open-url", (_evt, url) => {
 });
 
 app.on("will-quit", () => {
+    // [最终修复] 直接、同步地调用 stop()。
+    // execSync 的同步阻塞特性会暂停此处的执行，直到 taskkill/pkill 完成。
+    console.log("Will quit: Synchronously stopping mpv controller...");
+    mpvController.stop();
     globalShortcut.unregisterAll();
+    console.log("Will quit: Cleanup finished. App will now exit.");
 });
 
 // In this file you can include the rest of your app's specific main process
@@ -118,6 +124,7 @@ app.whenReady().then(async () => {
     WindowDrag.setup();
     shortCut.setup().then(voidCallback);
     logger.logPerf("Create Main Window");
+    
     // Setup message bus & app state
     messageBus.onAppStateChange((_, patch) => {
         if ("musicItem" in patch) {
@@ -157,6 +164,7 @@ app.whenReady().then(async () => {
     })
 
     messageBus.setup(windowManager);
+    setupPlayerHandlers(); // [新增] 调用设置函数
 
     windowManager.showMainWindow();
 
@@ -254,6 +262,41 @@ async function bootstrap() {
 
 }
 
+// [新增] 创建一个函数来统一处理播放器相关的 IPC
+function setupPlayerHandlers() {
+    // 监听渲染进程的命令
+    messageBus.onCommand('mpvLoad', (data) => {
+        console.log(`[Main] Received 'mpvLoad' command`, data);
+        const urlToPlay = data.url.startsWith('file:///') ? decodeURIComponent(data.url.substring(8)) : data.url;
+        mpvController.load(urlToPlay);
+    });
+    messageBus.onCommand('mpvPlay', (data) => {
+        console.log(`[Main] Received 'mpvPlay' command`, data);
+        // file:///C:/path -> C:/path (处理 Windows 文件路径), 并解码
+        const urlToPlay = data.url.startsWith('file:///') ? decodeURIComponent(data.url.substring(8)) : data.url;
+        mpvController.play(urlToPlay);
+    });
+    messageBus.onCommand('mpvTogglePause', () => mpvController.togglePause());
+    messageBus.onCommand('mpvSeek', (seconds) => mpvController.seek(seconds));
+    messageBus.onCommand('mpvSetVolume', (volume) => mpvController.setVolume(volume * 100)); // MPV 音量是 0-100
+    messageBus.onCommand('mpvSetSpeed', (speed) => mpvController.setSpeed(speed));
+    messageBus.onCommand('mpvSetLoop', (enable) => mpvController.setLoop(enable));
+    messageBus.onCommand('mpvStop', () => mpvController.stop());
+
+    // 监听 MpvController 的事件，并广播到所有渲染进程
+    mpvController.on('state-change', (state) => messageBus.sendCommand('appStatePatch', { playerState: state }));
+    mpvController.on('progress-update', (progress) => {
+        // 确保我们只发送有效的、非零的进度更新
+        if (progress.duration > 0) {
+            messageBus.sendCommand('appStatePatch', { progress: progress.currentTime, duration: progress.duration });
+        }
+    });
+    mpvController.on('finished', () => messageBus.sendCommand('mpvFinished'));
+    mpvController.on('error', (err) => {
+        console.error("MPV Controller Error:", err);
+        messageBus.sendCommand('appStatePatch', { playerState: PlayerState.None });
+    });
+}
 
 function handleProxy(enabled: boolean, host?: string | null, port?: string | null, username?: string | null, password?: string | null) {
     try {

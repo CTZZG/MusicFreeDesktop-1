@@ -20,9 +20,9 @@ import AppConfig from "@shared/app-config/renderer";
 import { createIndexMap, IIndexMap } from "@/common/index-map";
 import _trackPlayerStore from "./store";
 import EventEmitter from "eventemitter3";
-import { IAudioController } from "@/types/audio-controller";
-import AudioController from "@renderer/core/track-player/controller/audio-controller";
 import logger from "@shared/logger/renderer";
+import messageBus from "@shared/message-bus/renderer/main";
+import { IAppState } from "@shared/message-bus/type";
 import voidCallback from "@/common/void-callback";
 import { delay } from "@/common/time-util";
 import { createUniqueMap } from "@/common/unique-map";
@@ -129,14 +129,12 @@ class TrackPlayer {
 
     private currentIndex = -1;
 
-    private audioController: IAudioController;
 
     private ee: EventEmitter<InternalPlayerEvents>;
 
     constructor() {
         this.indexMap = createIndexMap();
         this.ee = new EventEmitter();
-        this.audioController = new AudioController();
     }
 
     on<T extends keyof InternalPlayerEvents>(event: T, callback: InternalPlayerEvents[T]) {
@@ -167,60 +165,19 @@ class TrackPlayer {
     }
 
 
-    private createAudioController() {
-        const audioController = new AudioController();
-        // 播放结束
-        audioController.onEnded = () => {
-            this.resetProgress();
-
-            switch (this.repeatMode) {
-                case RepeatMode.Queue:
-                case RepeatMode.Shuffle: {
-                    this.skipToNext();
-                    break;
-                }
-                case RepeatMode.Loop: {
-                    this.playIndex(this.currentIndex, {
-                        restartOnSameMedia: true
-                    });
-                }
-            }
+    // [新增] 播放完成后的处理逻辑
+    private handlePlaybackFinished() {
+        this.resetProgress();
+        switch (this.repeatMode) {
+            case RepeatMode.Queue:
+            case RepeatMode.Shuffle:
+                this.skipToNext();
+                break;
+            // Loop is now handled by mpv-controller internally
+            case RepeatMode.Loop:
+                // Do nothing, mpv-controller will handle the loop.
+                break;
         }
-        // 进度更新
-        audioController.onProgressUpdate = ((progress) => {
-            this.setProgress(progress);
-            // 检查歌词
-            if (this.lyric?.parser) {
-                const lyricItem = this.lyric.parser.getPosition(progress.currentTime);
-                if (this.lyric.currentLrc?.lrc !== lyricItem?.lrc) {
-                    this.setCurrentLyric({
-                        parser: this.lyric.parser,
-                        currentLrc: lyricItem
-                    })
-                }
-            }
-        })
-
-        audioController.onVolumeChange = (volume) => {
-            currentVolumeStore.setValue(volume);
-            setUserPreference("volume", volume);
-        }
-
-        audioController.onSpeedChange = (speed) => {
-            currentSpeedStore.setValue(speed);
-            setUserPreference("speed", speed);
-        }
-
-        audioController.onPlayerStateChanged = (state) => {
-            this.setPlayerState(state);
-        }
-
-        audioController.onError = async (type, reason) => {
-            this.ee.emit(PlayerEvents.Error, audioController.musicItem, reason);
-        }
-
-
-        this.audioController = audioController;
     }
 
     public async setup() {
@@ -238,8 +195,35 @@ class TrackPlayer {
         const deviceId = AppConfig.getConfig("playMusic.audioOutputDevice")?.deviceId;
 
         // 2. init audio controller
-        this.createAudioController();
         this.setupEvents();
+
+        // [新增] 监听主进程发来的播放完成事件
+        messageBus.onCommand('mpvFinished', () => {
+            this.handlePlaybackFinished();
+        });
+
+        // [修复] 监听主进程通过 appStatePatch 命令同步过来的状态
+        messageBus.onCommand('appStatePatch', (patch) => {
+            if ('playerState' in patch && patch.playerState) {
+                this.setPlayerState(patch.playerState);
+            }
+            if ('progress' in patch && 'duration' in patch && typeof patch.progress === 'number' && typeof patch.duration === 'number') {
+                const currentTime = patch.progress;
+                const duration = patch.duration;
+
+                this.setProgress({ currentTime, duration });
+
+                if (this.lyric?.parser) {
+                    const lyricItem = this.lyric.parser.getPosition(currentTime);
+                    if (this.lyric.currentLrc?.lrc !== lyricItem?.lrc) {
+                        this.setCurrentLyric({
+                            parser: this.lyric.parser,
+                            currentLrc: lyricItem,
+                        });
+                    }
+                }
+            }
+        });
 
         // 3. resume state
         musicQueueStore.setValue(playList);
@@ -249,34 +233,40 @@ class TrackPlayer {
             this.setRepeatMode(repeatMode as RepeatMode);
         }
 
+        // [修改] 启动时只恢复UI状态，不主动播放
+        // 播放状态和进度将由主进程通过 syncAppState 推送
         this.setCurrentMusic(currentMusic);
         this.currentIndex = this.findMusicIndex(currentMusic);
 
-        if (deviceId) {
-            this.setAudioOutputDevice(deviceId);
-        }
-
         if (volume !== null && volume !== undefined) {
-            this.setVolume(volume);
+            this.setVolume(volume, false); // 启动时不向主进程发送命令
+        }
+        
+        if (speed) {
+            this.setSpeed(speed, false); // 启动时不向主进程发送命令
         }
 
-        if (speed) {
-            this.setSpeed(speed)
+        if (currentProgress && this.progress.currentTime !== currentProgress) {
+             this.setProgress({ ...this.progress, currentTime: currentProgress });
         }
+
 
         // 4. reload lyric
         this.fetchCurrentLyric();
 
-        // 5. fetch music source
-        this.fetchMediaSource(currentMusic, defaultQuality).then(({ mediaSource, quality }) => {
-            if (this.isCurrentMusic(currentMusic)) {
-                this.setTrack(mediaSource, currentMusic, {
-                    seekTo: currentProgress,
-                    autoPlay: false
-                });
-                this.setCurrentQuality(quality);
-            }
-        }).catch(voidCallback);
+        // 5. [修改] 如果有上次播放的歌曲，则预加载它，但不播放
+        if (currentMusic) {
+            this.fetchMediaSource(currentMusic, defaultQuality).then(({ mediaSource, quality }) => {
+                // 确保在获取音源期间，用户没有切换歌曲
+                if (this.isCurrentMusic(currentMusic) && mediaSource?.url) {
+                    console.log('[Renderer] Preloading track on setup:', currentMusic.title);
+                    messageBus.sendCommand('mpvLoad', { url: mediaSource.url });
+                    this.setCurrentQuality(quality);
+                }
+            }).catch(e => {
+                console.error("Failed to preload track on setup:", e);
+            });
+        }
     }
 
 
@@ -312,7 +302,11 @@ class TrackPlayer {
             if (restartOnSameMedia) {
                 this.seekTo(0);
             }
-            this.audioController.play();
+            // [修复] 直接执行恢复播放的逻辑，而不是调用 resume()，以避免无限递归
+            if (this.playerState !== PlayerState.Playing) {
+                messageBus.sendCommand('mpvTogglePause');
+                this.setPlayerState(PlayerState.Playing);
+            }
 
             return;
         }
@@ -323,7 +317,6 @@ class TrackPlayer {
         this.currentIndex = index;
 
         this.setPlayerState(PlayerState.Buffering);
-        this.audioController.prepareTrack?.(nextMusicItem);
 
         try {
             const { mediaSource, quality } = await this.fetchMediaSource(nextMusicItem, intendedQuality);
@@ -366,7 +359,7 @@ class TrackPlayer {
         } catch (e) {
             // 播放失败
             this.setCurrentQuality(AppConfig.getConfig("playMusic.defaultQuality"));
-            this.audioController.reset();
+            messageBus.sendCommand('mpvStop');
             this.ee.emit(PlayerEvents.Error, nextMusicItem, e)
         }
 
@@ -429,39 +422,50 @@ class TrackPlayer {
 
     // 重置播放状态
     public reset() {
-        this.audioController.reset();
+        messageBus.sendCommand('mpvStop');
         this.setMusicQueue([]);
         this.setCurrentMusic(null);
         this.resetProgress();
         this.currentIndex = -1;
-
+        this.setPlayerState(PlayerState.None);
     }
 
     public seekTo(seconds: number) {
-        this.audioController.seekTo(seconds);
+        messageBus.sendCommand('mpvSeek', seconds);
     }
 
     public pause() {
-        this.audioController.pause();
-        if (this.playerState !== this.audioController.playerState) {
-            this.setPlayerState(this.audioController.playerState);
+        if (this.playerState === PlayerState.Playing) {
+            messageBus.sendCommand('mpvTogglePause');
+            this.setPlayerState(PlayerState.Paused);
         }
     }
 
     public resume() {
-        this.audioController.play();
-
-        if (this.playerState !== this.audioController.playerState) {
-            this.setPlayerState(this.audioController.playerState);
+        if (!this.currentMusic) {
+            return;
+        }
+        // [修复] 启动时已经预加载，所以 resume 总是发送 togglePause 即可。
+        if (this.playerState !== PlayerState.Playing) {
+            messageBus.sendCommand('mpvTogglePause');
+            this.setPlayerState(PlayerState.Playing);
         }
     }
 
-    public setVolume(volume: number) {
-        this.audioController.setVolume(volume);
+    public setVolume(volume: number, sendCommand = true) {
+        currentVolumeStore.setValue(volume);
+        setUserPreference("volume", volume);
+        if (sendCommand) {
+            messageBus.sendCommand('mpvSetVolume', volume);
+        }
     }
 
-    public setSpeed(speed: number) {
-        this.audioController.setSpeed(speed);
+    public setSpeed(speed: number, sendCommand = true) {
+        currentSpeedStore.setValue(speed);
+        setUserPreference("speed", speed);
+        if (sendCommand) {
+            messageBus.sendCommand('mpvSetSpeed', speed);
+        }
     }
 
     public addNext(musicItems: IMusic.IMusicItem | IMusic.IMusicItem[]) {
@@ -535,7 +539,7 @@ class TrackPlayer {
                 const musicItem = oldQueue[i];
                 if (uniqueMap.has(musicItem)) {
                     if (this.currentIndex === i) {
-                        this.audioController.reset();
+                        messageBus.sendCommand('mpvStop');
                         this.currentIndex = -1;
                         resetProgress();
                         this.setCurrentMusic(null);
@@ -555,7 +559,7 @@ class TrackPlayer {
                 return;
             }
             if (musicIndex === this.currentIndex) {
-                this.audioController.reset();
+                messageBus.sendCommand('mpvStop');
                 this.currentIndex = -1;
                 resetProgress();
                 this.setCurrentMusic(null);
@@ -588,17 +592,21 @@ class TrackPlayer {
         } else if (this.repeatMode === RepeatMode.Shuffle) {
             this.setMusicQueue(sortByTimestampAndIndex(this.musicQueue, true));
         }
+        
+        // [修改] 将循环状态同步到主进程
+        if (repeatMode === RepeatMode.Loop) {
+            messageBus.sendCommand('mpvSetLoop', true);
+        } else {
+            messageBus.sendCommand('mpvSetLoop', false);
+        }
+
         repeatModeStore.setValue(repeatMode);
         setUserPreference("repeatMode", repeatMode);
         this.ee.emit(PlayerEvents.RepeatModeChanged, repeatMode);
     }
 
     public async setAudioOutputDevice(deviceId?: string) {
-        try {
-            await this.audioController.setSinkId(deviceId ?? "");
-        } catch (e) {
-            logger.logError("设置音频输出设备失败", e);
-        }
+        // console.warn("setAudioOutputDevice is not implemented with MPV yet.");
     }
 
     public setMusicQueue(musicQueue: IMusic.IMusicItem[]) {
@@ -781,18 +789,23 @@ class TrackPlayer {
         removeUserPreference("currentProgress");
     }
 
-    private setTrack(mediaSource: IPlugin.IMediaSourceResult, musicItem: IMusic.IMusicItem, options: ITrackOptions = {
-        autoPlay: true
-    }) {
+    private setTrack(mediaSource: IPlugin.IMediaSourceResult, musicItem: IMusic.IMusicItem, options: ITrackOptions = { autoPlay: true }) {
         this.resetProgress();
-        this.audioController.setTrackSource(mediaSource, musicItem);
+
+        console.log(`[Renderer] Sending 'mpvPlay' command for track: ${musicItem.title}`, { url: mediaSource.url });
+        messageBus.sendCommand('mpvPlay', { url: mediaSource.url });
 
         if (options.seekTo >= 0) {
-            this.audioController.seekTo(options.seekTo);
+            setTimeout(() => messageBus.sendCommand('mpvSeek', options.seekTo), 200);
         }
 
         if (options.autoPlay) {
-            this.audioController.play();
+            this.setPlayerState(PlayerState.Playing);
+        } else {
+            setTimeout(() => {
+                messageBus.sendCommand('mpvTogglePause');
+            }, 100);
+            this.setPlayerState(PlayerState.Paused);
         }
     }
 

@@ -1,4 +1,3 @@
-// src/main/player/mpv-controller.ts
 import { spawn, ChildProcessWithoutNullStreams, execSync } from 'child_process';
 import { EventEmitter } from 'eventemitter3';
 import { app } from 'electron';
@@ -6,7 +5,6 @@ import * as net from 'net';
 import { PlayerState } from '../../common/constant';
 import { nanoid } from 'nanoid/non-secure';
 
-// 定义 MPV 事件和我们自己的内部事件
 interface MpvEvents {
     'state-change': (state: PlayerState) => void;
     'progress-update': (progress: { currentTime: number; duration: number }) => void;
@@ -14,7 +12,6 @@ interface MpvEvents {
     'error': (err: Error) => void;
 }
 
-// MPV JSON IPC 消息接口
 interface MpvMessage {
     event?: string;
     data?: any;
@@ -24,7 +21,6 @@ interface MpvMessage {
     reason?: string;
 }
 
-// 为 Windows 命名管道生成唯一路径
 const socketPath = `\\\\.\\pipe\\mpvsocket-${nanoid(8)}`;
 
 class MpvController extends EventEmitter<MpvEvents> {
@@ -42,9 +38,17 @@ class MpvController extends EventEmitter<MpvEvents> {
     private watchdogTimer: NodeJS.Timeout | null = null;
     private lastWatchdogProgress = -1;
     private fileLoadTimeout: NodeJS.Timeout | null = null;
+    private isRecovering = false;
+    private readonly MAX_SOCKET_RETRIES = 8;
+    private lastKnownState: PlayerState = PlayerState.None;
 
-    // [新增] 预加载方法，加载但不播放
     public async load(url: string) {
+        this.lastKnownState = PlayerState.Buffering;
+        this.emit('state-change', PlayerState.Buffering);
+        if (this.isRecovering) {
+            console.warn('Blocked load during recovery');
+            return;
+        }
         this.lastWatchdogProgress = -1;
         if (this.mpvProcess && !(await this.healthCheck())) {
             await this.recover();
@@ -54,13 +58,18 @@ class MpvController extends EventEmitter<MpvEvents> {
         }
 
         this.currentUrl = url;
-        // [修复] 分解为两个正确的命令：先加载，再暂停
         this.sendCommand(['loadfile', url, 'replace']).catch(e => console.error("loadfile failed:", e));
         this.sendCommand(['set_property', 'pause', true]).catch(e => console.error("set pause after load failed:", e));
-        this.applyLoopProperty(); // 确保预加载后也应用循环属性
+        this.applyLoopProperty();
     }
 
     public async play(url: string) {
+        this.lastKnownState = PlayerState.Buffering;
+        this.emit('state-change', PlayerState.Buffering);
+        if (this.isRecovering) {
+            console.warn('Blocked play during recovery');
+            return;
+        }
         this.lastWatchdogProgress = -1;
         if (this.mpvProcess && !(await this.healthCheck())) {
             await this.recover();
@@ -70,33 +79,33 @@ class MpvController extends EventEmitter<MpvEvents> {
         }
 
         this.currentUrl = url;
-        // Use `loadfile` which is more robust for changing tracks and looping.
         this.sendCommand(['loadfile', url, 'replace'])
             .then(() => {
                 this.startWatchdog();
             })
             .catch(e => {
                 console.error("loadfile failed, skipping to next:", e);
-                // If loading fails directly, we must emit 'finished' to allow the player
-                // to proceed to the next track in the playlist.
                 this.emit('finished');
             });
-        this.applyLoopProperty(); // 每次播放新歌曲时，都重新应用循环属性
+        this.applyLoopProperty();
     }
 
     private startMpvProcess() {
         if (this.mpvProcess) {
-            // It should have been stopped before starting a new one.
-            // But as a safeguard:
             this.stop();
         }
 
         const args = [
+            '--reset-on-next-file=vf,af,metadata,chapters',
+            '--pause=no',
+            '--demuxer-max-bytes=1000M',
+            '--demuxer-max-back-bytes=3m',
+            '--keep-open=no',
             `--input-ipc-server=${socketPath}`,
             '--idle=yes',
             '--no-video',
             '--cache=yes',
-            '--demuxer-max-bytes=300M', // 增加到 200MB 缓存
+            '--really-quiet',
         ];
 
         try {
@@ -110,7 +119,7 @@ class MpvController extends EventEmitter<MpvEvents> {
             this.connect();
         } catch (error) {
             this.emit('error', error);
-            this.stop(); // Clean up on spawn error
+            this.stop();
         }
     }
 
@@ -127,7 +136,7 @@ class MpvController extends EventEmitter<MpvEvents> {
             this.socket.on('data', this.handleSocketData);
             this.socket.on('error', (err: Error) => this.handleSocketError(err, retryCount));
             this.socket.on('close', this.handleSocketClose);
-        }, 200); // Increased delay slightly for stability
+        }, 500);
     }
 
     private handleSocketData = (data: Buffer) => {
@@ -148,33 +157,58 @@ class MpvController extends EventEmitter<MpvEvents> {
     }
 
     private handleMpvMessage(msg: MpvMessage) {
+        // 处理暂停状态变化
+        if (msg.event === 'property-change' && msg.name === 'pause') {
+            this.lastKnownState = msg.data ? PlayerState.Paused : PlayerState.Playing;
+            this.emit('state-change', this.lastKnownState);
+        }
+        
+        // 开始加载新文件
         if (msg.event === 'start-file') {
+            // 更新为缓冲状态
+            this.lastKnownState = PlayerState.Buffering;
+            this.emit('state-change', PlayerState.Buffering);
+            
             if (this.fileLoadTimeout) clearTimeout(this.fileLoadTimeout);
             this.fileLoadTimeout = setTimeout(() => {
                 console.log('Watchdog: file-loaded timeout. Skipping to next...');
                 this.emit('finished');
-            }, 15000); // 15秒加载超时
-        } else if (msg.event === 'file-loaded') {
+            }, 60000);
+        } 
+        // 文件加载完成
+        else if (msg.event === 'file-loaded') {
             if (this.fileLoadTimeout) clearTimeout(this.fileLoadTimeout);
-        } else if (msg.event === 'property-change') {
-            if (msg.name === 'pause') {
-                this.emit('state-change', msg.data ? PlayerState.Paused : PlayerState.Playing);
-            } else if (msg.name === 'duration' && typeof msg.data === 'number') {
+            
+            // 更新为播放状态（除非显式暂停）
+            if (this.lastKnownState !== PlayerState.Paused) {
+                this.lastKnownState = PlayerState.Playing;
+                this.emit('state-change', PlayerState.Playing);
+            }
+        } 
+        // 属性变化
+        else if (msg.event === 'property-change') {
+            if (msg.name === 'duration' && typeof msg.data === 'number') {
                 this.lastProgress.duration = msg.data;
-                // Don't emit yet, wait for time-pos to have a complete picture
             } else if (msg.name === 'time-pos' && typeof msg.data === 'number') {
                 this.lastProgress.currentTime = msg.data;
-                if (this.lastProgress.duration > 0) { // Only emit when we have a valid duration
+                if (this.lastProgress.duration > 0) {
                     this.emit('progress-update', { ...this.lastProgress });
                 }
             }
-        } else if (msg.event === 'end-file' && (msg.reason === 'eof' || msg.reason === 'error')) {
+        } 
+        // 播放结束
+        else if (msg.event === 'end-file' && (msg.reason === 'eof' || msg.reason === 'error')) {
             if (this.fileLoadTimeout) clearTimeout(this.fileLoadTimeout);
             this.stopWatchdog();
             this.lastProgress = { currentTime: 0, duration: 0 };
-            // Loop is now handled by mpv's native loop-file property, so we only emit 'finished'.
+            
+            // 更新为停止状态
+            this.lastKnownState = PlayerState.None;
+            this.emit('state-change', PlayerState.None);
             this.emit('finished');
-        } else if (msg.request_id && this.commandCallbacks.has(msg.request_id)) {
+        } 
+        // 命令响应
+        else if (msg.request_id && this.commandCallbacks.has(msg.request_id)) {
             const callback = this.commandCallbacks.get(msg.request_id);
             callback(msg.error === 'success' ? null : msg.error, msg.data);
             this.commandCallbacks.delete(msg.request_id);
@@ -200,7 +234,7 @@ class MpvController extends EventEmitter<MpvEvents> {
                     this.commandCallbacks.delete(requestId);
                     reject(new Error(`Command timed out: ${command[0]}`));
                 }
-            }, 3000); // 3-second timeout
+            }, 15000);
 
             this.commandCallbacks.set(requestId, (err, data) => {
                 clearTimeout(timeout);
@@ -212,45 +246,71 @@ class MpvController extends EventEmitter<MpvEvents> {
     }
 
     public async togglePause() {
-        if (this.mpvProcess && !(await this.healthCheck())) {
-            await this.recover();
+        if (this.isRecovering) {
+            console.warn('Blocked togglePause during recovery');
+            return;
         }
-        // If process was recovered, a new one will be started by the next command that needs it.
-        // If no process, queueing will handle it.
-        this.sendCommand(['get_property', 'pause'], true).then(isPaused => {
-            if (isPaused) { // it's about to play
+        
+        try {
+            const isPaused = await this.sendCommand(['get_property', 'pause'], true);
+            // 立即更新本地状态
+            this.lastKnownState = isPaused ? PlayerState.Playing : PlayerState.Paused;
+            this.emit('state-change', this.lastKnownState);
+            
+            if (isPaused) {
                 this.startWatchdog();
-            } else { // it's about to pause
+            } else {
                 this.stopWatchdog();
             }
-        }).catch(() => { /* do nothing on failure */ });
-        this.sendCommand(['cycle', 'pause']).catch(e => console.error("togglePause failed:", e));
+            
+            await this.sendCommand(['cycle', 'pause']);
+        } catch (e) {
+            console.error("togglePause failed:", e);
+        }
     }
+
     public async seek(seconds: number) {
+        if (this.isRecovering) {
+            console.warn('Blocked load during recovery');
+            return;
+        }
         if (this.mpvProcess && !(await this.healthCheck())) {
             await this.recover();
         }
         this.sendCommand(['set_property', 'time-pos', seconds]).catch(e => console.error("seek failed:", e));
     }
+
     public async setVolume(level: number) {
+        if (this.isRecovering) {
+            console.warn('Blocked load during recovery');
+            return;
+        }
         if (this.mpvProcess && !(await this.healthCheck())) {
             await this.recover();
         }
         this.sendCommand(['set_property', 'volume', level]).catch(e => console.error("setVolume failed:", e));
     }
+
     public async setSpeed(speed: number) {
+        if (this.isRecovering) {
+            console.warn('Blocked load during recovery');
+            return;
+        }
         if (this.mpvProcess && !(await this.healthCheck())) {
             await this.recover();
         }
         this.sendCommand(['set_property', 'speed', speed]).catch(e => console.error("setSpeed failed:", e));
     }
-    // [修改] setLoop 只更新内部状态，由 play/load 方法去应用
+
     public async setLoop(enable: boolean) {
+        if (this.isRecovering) {
+            console.warn('Blocked load during recovery');
+            return;
+        }
         if (this.mpvProcess && !(await this.healthCheck())) {
             await this.recover();
         }
         this.loop = enable;
-        // 如果已经有音乐在播放，则立即应用循环属性
         if (this.currentUrl) {
             this.applyLoopProperty();
         }
@@ -261,22 +321,92 @@ class MpvController extends EventEmitter<MpvEvents> {
         this.sendCommand(['set_property', 'loop-file', loopValue]).catch(e => console.error("setLoopProperty failed:", e));
     }
 
-
     private async healthCheck(): Promise<boolean> {
         try {
-            await this.sendCommand(['get_property', 'pid'], true);
+            await Promise.race([
+                this.sendCommand(['get_property', 'volume'], true),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Health check timeout')), 5000)
+                )
+            ]);
             return true;
         } catch (error) {
-            console.error('Health check failed:', error.message);
+            console.warn('Primary health check failed:', error.message);
+        }
+        
+        try {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            await this.sendCommand(['get_property', 'volume'], true);
+            return true;
+        } catch (retryError) {
+            console.error('Secondary health check failed:', retryError.message);
             return false;
         }
     }
 
     private async recover() {
-        console.log('MPV process is unresponsive. Recovering...');
-        // Only job is to clean up the dead process.
-        // The calling method will handle starting a new one.
-        await this.stop();
+        if (this.isRecovering) {
+            console.log('Recovery already in progress');
+            return;
+        }
+        
+        try {
+            this.isRecovering = true;
+            console.log('Initiating MPV recovery...');
+            
+            const currentUrl = this.currentUrl;
+            const wasPlaying = this.lastKnownState === PlayerState.Playing;
+            
+            await this.stop();
+            
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            if (currentUrl) {
+                console.log('Replaying after recovery:', currentUrl);
+                this.startMpvProcess();
+                
+                await new Promise<void>((resolve, reject) => {
+                    const timeout = setTimeout(() => 
+                        reject(new Error('MPV startup timed out after 15 seconds')), 
+                        15000
+                    );
+                    
+                    const checkReady = () => {
+                        if (this.isReady) {
+                            clearTimeout(timeout);
+                            resolve();
+                        } else if (!this.mpvProcess || this.mpvProcess.killed) {
+                            clearTimeout(timeout);
+                            reject(new Error('MPV process died during startup'));
+                        } else {
+                            setTimeout(checkReady, 100);
+                        }
+                    };
+                    
+                    checkReady();
+                });
+                
+                this.currentUrl = currentUrl;
+                this.sendCommand(['loadfile', currentUrl, 'replace'])
+                    .catch(e => console.error('Recovery load failed:', e));
+                
+                if (wasPlaying) {
+                    setTimeout(() => {
+                        this.sendCommand(['set_property', 'pause', false])
+                            .catch(e => console.error('Resume play failed:', e));
+                    }, 1000);
+                }
+            }
+        } catch (e) {
+            console.error('Recovery failed:', e);
+            this.emit('error', new Error('Recovery failed: ' + e.message));
+            
+            console.log('Retrying recovery in 3 seconds...');
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            await this.recover();
+        } finally {
+            this.isRecovering = false;
+        }
     }
 
 
@@ -284,24 +414,58 @@ class MpvController extends EventEmitter<MpvEvents> {
         if (this.isStopping) return;
         this.isStopping = true;
         this.stopWatchdog();
-        console.log('MpvController stop called.');
-
+        console.log('Stopping MPV controller...');
+        
         this.isReady = false;
         this.currentUrl = null;
-
+        this.buffer = '';
+        this.commandCallbacks.clear();
+    
         if (this.socket && !this.socket.destroyed) {
-            this.socket.end();
+            try {
+                this.socket.destroy();
+                this.socket = null;
+            } catch (e) {
+                console.warn('Socket destroy error:', e);
+            }
         }
-
+    
         if (this.mpvProcess && !this.mpvProcess.killed) {
-            console.log(`Killing mpv.exe process with PID: ${this.mpvProcess.pid}`);
-            this.mpvProcess.kill();
+            console.log(`Terminating MPV process (PID: ${this.mpvProcess.pid})`);
+            
+            const pid = this.mpvProcess.pid;
+            this.mpvProcess.removeAllListeners();
+            
+            try {
+                if (process.platform === 'win32') {
+                    try {
+                        execSync(`tasklist /fi "PID eq ${pid}"`);
+                    } catch {
+                        console.log('Process already exited');
+                        return;
+                    }
+                    
+                    execSync(`taskkill /pid ${pid} /f /t`);
+                } else {
+                    try {
+                        process.kill(-pid, 'SIGKILL');
+                    } catch (e) {
+                        if (e.code !== 'ESRCH') throw e;
+                    }
+                }
+                console.log('MPV process terminated');
+            } catch (e) {
+                console.warn('Process termination warning:', e.message);
+            } finally {
+                this.mpvProcess = null;
+            }
+        } else {
+            this.mpvProcess = null;
         }
-
+    
         this.commandQueue = [];
-        this.socket = null;
-        this.mpvProcess = null;
         this.emit('state-change', PlayerState.None);
+        console.log('MPV controller stopped');
         this.isStopping = false;
     }
 
@@ -317,61 +481,62 @@ class MpvController extends EventEmitter<MpvEvents> {
     }
 
     private startWatchdog() {
-        this.stopWatchdog(); // Clear any existing timer
-
+        this.stopWatchdog();
+    
         this.watchdogTimer = setInterval(async () => {
-            if (this.mpvProcess && this.isReady) {
-                const isPlaying = !(await this.sendCommand(['get_property', 'pause'], true).catch(() => true));
-                const currentProgress = await this.sendCommand(['get_property', 'time-pos'], true).catch(() => -1);
-                const duration = this.lastProgress.duration;
-
-                // 检查1: 健康检查失败 (最高优先级)
-                if (!await this.healthCheck()) {
+            if (this.isRecovering || !this.mpvProcess || !this.isReady) return;
+    
+            try {
+                const currentProgress = await this.sendCommand(
+                    ['get_property', 'time-pos'], 
+                    true
+                ).catch(() => -1);
+                
+                if (currentProgress >= 0) {
+                    this.lastWatchdogProgress = currentProgress;
+                    return;
+                }
+                
+                console.warn('Watchdog command failed, triggering health check');
+                if (!(await this.safeHealthCheck())) {
                     console.log('Watchdog: Unhealthy process detected. Recovering...');
                     const urlToRecover = this.currentUrl;
                     await this.recover();
-                    if (urlToRecover) {
-                        this.play(urlToRecover);
-                    }
-                    return; // 恢复后，本次检查结束
+                    if (urlToRecover) this.play(urlToRecover);
                 }
-
-                // 检查2: 播放是否停滞
-                const isStalled = currentProgress > 0 && currentProgress === this.lastWatchdogProgress;
-                if (!isStalled) {
-                    this.lastWatchdogProgress = currentProgress;
-                    return; // 如果没有停滞，直接更新进度并结束本次检查
-                }
-
-                // 如果播放停滞了，判断是否需要跳过
-                // 条件1: 播放器仍在播放状态，但进度没动 (通用卡死)
-                // 条件2: 播放器可能已暂停，但进度卡在离结尾不到3秒的地方 (VBR文件结尾卡死)
-                const isStuckAtEnd = duration > 0 && (duration - currentProgress < 3);
-
-                if (isPlaying || isStuckAtEnd) {
-                    if (isStuckAtEnd) {
-                        console.log('Watchdog: Playback stalled near end. Assuming finished. Skipping to next...');
-                    } else {
-                        console.log('Watchdog: Playback stalled mid-track. Skipping to next...');
-                    }
-                    this.stopWatchdog();
-                    this.emit('finished');
-                }
-                // 如果只是普通暂停（且不在结尾），则什么也不做
+            } catch (error) {
+                console.error('Watchdog error:', error);
+                console.log('Watchdog error detected, triggering recovery');
+                const urlToRecover = this.currentUrl;
+                await this.recover();
+                if (urlToRecover) this.play(urlToRecover);
             }
-        }, 5000); // Check every 5 seconds
+        }, 30000);
+    }
+    
+    private async safeHealthCheck(): Promise<boolean> {
+        try {
+            await Promise.race([
+                this.sendCommand(['get_property', 'volume'], true),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Health check timeout')), 3000)
+                )
+            ]);
+            return true;
+        } catch (error) {
+            console.warn('Health check failed:', error.message);
+            return false;
+        }
     }
 
     private handleSocketConnect = async () => {
         console.log('MPV socket connected.');
         this.isReady = true;
 
-        // Observe properties needed for playback control
         await this.sendCommand(['observe_property', 1, 'time-pos'], true);
         await this.sendCommand(['observe_property', 2, 'duration'], true);
         await this.sendCommand(['observe_property', 3, 'pause'], true);
 
-        // Execute any queued commands
         console.log(`Executing ${this.commandQueue.length} queued commands.`);
         while (this.commandQueue.length > 0) {
             const command = this.commandQueue.shift();
@@ -382,16 +547,23 @@ class MpvController extends EventEmitter<MpvEvents> {
     };
     private handleProcessError = (err: Error) => { this.emit('error', err); this.stop(); };
     private handleProcessClose = () => {
-        // [修复] 只记录日志，不调用 stop()，防止重入
         console.log('MPV process closed.');
     };
     private handleSocketError = (err: Error, retryCount: number) => {
-        console.error(`MPV socket error (retry ${retryCount}):`, err.message);
-        this.isReady = false;
-        if (this.mpvProcess && !this.mpvProcess.killed) {
-            // Don't retry indefinitely if the process is gone.
-            this.connect(retryCount + 1);
+        console.error(`Socket error (retry ${retryCount}/${this.MAX_SOCKET_RETRIES}):`, err.message);
+        
+        if (retryCount > this.MAX_SOCKET_RETRIES) {
+            console.error('Max socket retries exceeded');
+            this.emit('error', new Error('MPV connection failed after retries'));
+            return;
         }
+        
+        const delay = Math.min(1000 * Math.pow(2, retryCount), 8000);
+        setTimeout(() => {
+            if (this.mpvProcess && !this.mpvProcess.killed) {
+                this.connect(retryCount + 1);
+            }
+        }, delay);
     };
     private handleSocketClose = () => {
         console.log('MPV socket closed.');

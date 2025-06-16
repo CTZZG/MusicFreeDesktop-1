@@ -173,9 +173,11 @@ class TrackPlayer {
             case RepeatMode.Shuffle:
                 this.skipToNext();
                 break;
-            // Loop is now handled by mpv-controller internally
             case RepeatMode.Loop:
-                // Do nothing, mpv-controller will handle the loop.
+                // [修复] 在 mpv 重启后，需要显式地重新播放当前歌曲以维持循环
+                if (this.currentMusic) {
+                    this.playIndex(this.currentIndex, { restartOnSameMedia: true });
+                }
                 break;
         }
     }
@@ -452,14 +454,20 @@ class TrackPlayer {
         }
     }
 
-    public resume() {
+    public async resume() {
         if (!this.currentMusic) {
             return;
         }
-        // [修复] 启动时已经预加载，所以 resume 总是发送 togglePause 即可。
-        if (this.playerState !== PlayerState.Playing) {
+
+        if (this.playerState === PlayerState.Paused) {
             messageBus.sendCommand('mpvTogglePause');
             this.setPlayerState(PlayerState.Playing);
+        } else if (this.playerState !== PlayerState.Playing) {
+            console.log(`Resume: Player state is ${this.playerState}, re-issuing play command.`);
+            await this.playIndex(this.currentIndex, {
+                restartOnSameMedia: false,
+                seekTo: this.progress.currentTime
+            });
         }
     }
 

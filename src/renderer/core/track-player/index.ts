@@ -428,6 +428,17 @@ class TrackPlayer {
         this.resetProgress();
         this.currentIndex = -1;
         this.setPlayerState(PlayerState.None);
+
+        // [新增] 发送一个完整的重置状态给主进程，确保插件安全
+        messageBus.sendCommand('appStatePatch', {
+            musicItem: null,
+            playerState: PlayerState.None,
+            progress: 0,
+            duration: 0,
+            lyricText: null,
+            parsedLrc: null,
+            fullLyric: null,
+        })
     }
 
     public seekTo(seconds: number) {
@@ -541,7 +552,7 @@ class TrackPlayer {
                     if (this.currentIndex === i) {
                         messageBus.sendCommand('mpvStop');
                         this.currentIndex = -1;
-                        resetProgress();
+                        this.resetProgress();
                         this.setCurrentMusic(null);
                     }
                 } else {
@@ -561,7 +572,7 @@ class TrackPlayer {
             if (musicIndex === this.currentIndex) {
                 messageBus.sendCommand('mpvStop');
                 this.currentIndex = -1;
-                resetProgress();
+                this.resetProgress();
                 this.setCurrentMusic(null);
             }
 
@@ -741,6 +752,18 @@ class TrackPlayer {
                 setUserPreference("currentMusic", musicItem);
             } else {
                 removeUserPreference("currentMusic");
+                // [新增] 当音乐停止时，也调用 resetProgress 以确保状态一致
+                this.resetProgress();
+                // [新增] 发送一个完整的重置状态给主进程
+                messageBus.sendCommand('appStatePatch', {
+                    musicItem: null,
+                    playerState: this.playerState, // 保持当前播放器状态（可能是None或Paused）
+                    progress: 0,
+                    duration: 0,
+                    lyricText: null,
+                    parsedLrc: null,
+                    fullLyric: null,
+                });
             }
         } else {
             // 相同的歌曲，不需要额外触发事件

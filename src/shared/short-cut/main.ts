@@ -1,7 +1,7 @@
-import {globalShortcut, ipcMain} from "electron";
+import { globalShortcut, ipcMain } from "electron";
 import AppConfig from "@shared/app-config/main";
-import {IAppConfig} from "@/types/app-config";
-import {shortCutKeys, shortCutKeysCommands} from "@/common/constant";
+import { IAppConfig } from "@/types/app-config";
+import { shortCutKeys, shortCutKeysCommands } from "@/common/constant";
 import messageBus from "@shared/message-bus/main";
 
 type IShortCutKeys = keyof IAppConfig["shortCut.shortcuts"];
@@ -12,11 +12,11 @@ class ShortCut {
 
         ipcMain.on("@shared/short-cut/register-global-short-cut", async (_, key, shortCut) => {
             await this.registerGlobalShortCut(key, shortCut);
-        })
+        });
 
         ipcMain.on("@shared/short-cut/unregister-global-short-cut", async (_, key) => {
             await this.unregisterGlobalShortCut(key);
-        })
+        });
     }
 
     public async registerAllGlobalShortCuts() {
@@ -59,12 +59,12 @@ class ShortCut {
                     ...(prevConfig || {} as any),
                     [key]: {
                         ...(prevConfig?.[key] || {}),
-                        global: reg ? shortCut : null
-                    }
-                }
+                        global: reg ? shortCut : null,
+                    },
+                };
                 // 4. 更新配置
                 AppConfig.setConfig({
-                    "shortCut.shortcuts": newConfig
+                    "shortCut.shortcuts": newConfig,
                 });
             }
         } catch {
@@ -84,11 +84,11 @@ class ShortCut {
                 ...(prevConfig || {} as any),
                 [key]: {
                     ...(prevConfig?.[key] || {}),
-                    global: null
-                }
+                    global: null,
+                },
             } as IAppConfig["shortCut.shortcuts"];
             AppConfig.setConfig({
-                "shortCut.shortcuts": newConfig
+                "shortCut.shortcuts": newConfig,
             });
         }
     }

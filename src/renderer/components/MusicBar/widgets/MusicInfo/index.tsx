@@ -1,15 +1,15 @@
 import SvgAsset from "@/renderer/components/SvgAsset";
-import {setFallbackAlbum} from "@/renderer/utils/img-on-error";
+import { setFallbackAlbum } from "@/renderer/utils/img-on-error";
 import "./index.scss";
 
 import Tag from "@/renderer/components/Tag";
-import {secondsToDuration} from "@/common/time-util";
+import { secondsToDuration } from "@/common/time-util";
 import MusicFavorite from "@/renderer/components/MusicFavorite";
-import MusicDetail, {useMusicDetailShown} from "@/renderer/components/MusicDetail";
+import MusicDetail, { useMusicDetailShown } from "@/renderer/components/MusicDetail";
 import albumImg from "@/assets/imgs/album-cover.jpg";
-import {useTranslation} from "react-i18next";
-import {useCurrentMusic, useProgress} from "@renderer/core/track-player/hooks";
-import {hidePanel, showPanel} from "@renderer/components/Panel";
+import { useTranslation } from "react-i18next";
+import { useCurrentMusic, useProgress } from "@renderer/core/track-player/hooks";
+import { hidePanel, showPanel } from "@renderer/components/Panel";
 import MusicDownloaded from "@renderer/components/MusicDownloaded";
 import PluginManager from "@shared/plugin-manager/renderer";
 
@@ -17,7 +17,7 @@ export default function MusicInfo() {
     const musicItem = useCurrentMusic();
     const musicDetailShown = useMusicDetailShown();
 
-    const {t} = useTranslation();
+    const { t } = useTranslation();
 
     function toggleMusicDetail() {
         if (musicDetailShown) {
@@ -56,7 +56,7 @@ export default function MusicInfo() {
                             </div>
                             <div className="music-info">
                                 <div className="music-title">
-                                  <span role="button" onClick={toggleMusicDetail}
+                                    <span role="button" onClick={toggleMusicDetail}
                                         title={musicItem.title}>{musicItem.title}</span>
                                     <Tag
                                         fill
@@ -78,7 +78,7 @@ export default function MusicInfo() {
                 </div>
             </div>
             <div data-detail-shown={musicDetailShown}
-                 className="music-info-content-container music-info-operations-container">
+                className="music-info-content-container music-info-operations-container">
                 <div
                     className="open-detail"
                     role="button"
@@ -94,13 +94,13 @@ export default function MusicInfo() {
                 <MusicFavorite musicItem={musicItem} size={22}></MusicFavorite>
                 <MusicDownloaded musicItem={musicItem} size={22}></MusicDownloaded>
                 <div role="button"
-                     data-disabled={!PluginManager.isSupportFeatureMethod(musicItem?.platform, "getMusicComments")}
-                     onClick={() => {
-                         showPanel("MusicComment", {
-                             musicItem: musicItem,
-                             coverHeader: true
-                         })
-                     }}>
+                    data-disabled={!PluginManager.isSupportFeatureMethod(musicItem?.platform, "getMusicComments")}
+                    onClick={() => {
+                        showPanel("MusicComment", {
+                            musicItem: musicItem,
+                            coverHeader: true,
+                        });
+                    }}>
                     <SvgAsset iconName="chat-bubble-left-ellipsis" size={22}></SvgAsset>
                 </div>
                 <div className="music-info-operation-divider"></div>
@@ -111,7 +111,7 @@ export default function MusicInfo() {
 }
 
 function Progress() {
-    const {currentTime, duration} = useProgress();
+    const { currentTime, duration } = useProgress();
     return (
         <div className="progress">
             {isFinite(duration)

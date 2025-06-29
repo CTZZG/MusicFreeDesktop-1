@@ -1,4 +1,4 @@
-import {contextBridge, ipcRenderer} from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 
 
 function registerGlobalShortCut(key: string, shortCut: string[]) {
@@ -11,7 +11,7 @@ function unregisterGlobalShortCut(key: string) {
 
 const mod = {
     registerGlobalShortCut,
-    unregisterGlobalShortCut
+    unregisterGlobalShortCut,
 };
 
 contextBridge.exposeInMainWorld("@shared/short-cut", mod);

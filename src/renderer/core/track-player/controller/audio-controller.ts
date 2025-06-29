@@ -55,38 +55,38 @@ class AudioController extends ControllerBase implements IAudioController {
         this.audio.onplaying = () => {
             this.playerState = PlayerState.Playing;
             navigator.mediaSession.playbackState = "playing";
-        }
+        };
 
         this.audio.onpause = () => {
             this.playerState = PlayerState.Paused;
             navigator.mediaSession.playbackState = "paused";
-        }
+        };
 
         this.audio.onerror = (event) => { // Default error handler, will be overridden in tryNativePlayback
             this.playerState = PlayerState.Paused;
             navigator.mediaSession.playbackState = "paused";
             this.onError?.(ErrorReason.EmptyResource, event as any);
-        }
+        };
 
         this.audio.ontimeupdate = () => {
             this.onProgressUpdate?.({
                 currentTime: this.audio.currentTime,
                 duration: this.audio.duration, // 缓冲中是Infinity
             });
-        }
+        };
 
         this.audio.onended = () => {
             this.playerState = PlayerState.Paused;
             this.onEnded?.();
-        }
+        };
 
         this.audio.onvolumechange = () => {
             this.onVolumeChange?.(this.audio.volume);
-        }
+        };
 
         this.audio.onratechange = () => {
             this.onSpeedChange?.(this.audio.playbackRate);
-        }
+        };
 
         // @ts-ignore  isDev
         window.ad = this.audio;
@@ -105,7 +105,7 @@ class AudioController extends ControllerBase implements IAudioController {
             this.hls.attachMedia(this.audio);
             this.hls.on(HlsEvents.ERROR, (evt, error) => {
                 this.onError(ErrorReason.EmptyResource, error);
-            })
+            });
         }
     }
 
@@ -175,7 +175,8 @@ class AudioController extends ControllerBase implements IAudioController {
         } else if (this.hasSource && isFinite(seconds)) { // 原生 audio 或 HLS
             const duration = this.audio.duration;
             this.audio.currentTime = Math.min(
-                seconds, isNaN(duration) ? Infinity : duration
+                seconds,
+                isNaN(duration) ? Infinity : duration,
             );
         }
     }
@@ -253,10 +254,17 @@ class AudioController extends ControllerBase implements IAudioController {
         }
 
         if (urlObj.username && urlObj.password) {
-            const authHeader = `Basic ${btoa(`${decodeURIComponent(urlObj.username)}:${decodeURIComponent(urlObj.password)}`)}`;
+            const authHeader = `Basic ${btoa(
+                `${decodeURIComponent(urlObj.username)}:${decodeURIComponent(
+                    urlObj.password,
+                )}`,
+            )}`;
             urlObj.username = "";
             urlObj.password = "";
-            headers = { ...(headers || {}), Authorization: authHeader };
+            headers = {
+                ...(headers || {}),
+                Authorization: authHeader,
+            };
             url = urlObj.toString();
         }
         

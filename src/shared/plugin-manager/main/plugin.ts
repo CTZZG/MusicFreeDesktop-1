@@ -7,7 +7,7 @@ import * as cheerio from "cheerio";
 import he from "he";
 import PluginMethods from "./plugin-methods";
 import reactNativeCookies from "./polyfill/react-native-cookies";
-import {app} from "electron";
+import { app } from "electron";
 import * as webdav from "webdav";
 import AppConfig from "@shared/app-config/main";
 import pluginStorage from "@shared/plugin-manager/main/polyfill/storage";
@@ -33,7 +33,7 @@ const packages: Record<string, any> = {
     he,
     "@react-native-cookies/cookies": reactNativeCookies,
     webdav,
-    "musicfree/storage": pluginStorage
+    "musicfree/storage": pluginStorage,
 };
 
 const _require = (packageName: string) => {
@@ -80,10 +80,10 @@ export class Plugin {
 
     constructor(
         funcCode: string | (() => IPlugin.IPluginInstance),
-        pluginPath: string
+        pluginPath: string,
     ) {
         let _instance: IPlugin.IPluginInstance;
-        const _module: any = {exports: {}, loaded: false};
+        const _module: any = { exports: {}, loaded: false };
         let loadResolveCallback: () => void = null;
         const ensurePluginInitialized = new Promise<void>((resolve) => {
             loadResolveCallback = resolve;
@@ -106,10 +106,10 @@ export class Plugin {
                     platform: process.platform,
                     version: app.getVersion(),
                     env,
-                    ensurePluginInitialized
+                    ensurePluginInitialized,
                 };
 
-                // eslint-disable-next-line no-new-func
+                 
                 _instance = Function(`
                     'use strict';
                     return function(require, __musicfree_require, module, exports, console, env, process) {
@@ -122,7 +122,7 @@ export class Plugin {
                     _module.exports,
                     console,
                     env,
-                    _process
+                    _process,
                 );
                 if (_module.exports.default) {
                     _instance = _module.exports.default as IPlugin.IPluginInstance;
@@ -138,7 +138,7 @@ export class Plugin {
             // 插件初始化后的一些操作
             if (Array.isArray(_instance.userVariables)) {
                 _instance.userVariables = _instance.userVariables.filter(
-                    (it) => it?.key
+                    (it) => it?.key,
                 );
             }
             this.checkValid(_instance);

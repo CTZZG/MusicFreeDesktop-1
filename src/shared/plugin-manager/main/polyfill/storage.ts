@@ -1,7 +1,7 @@
-import {app} from "electron";
+import { app } from "electron";
 import path from "path";
 import fs from "fs/promises";
-import {rimraf} from "rimraf";
+import { rimraf } from "rimraf";
 
 const MAX_STORAGE_SIZE = 1024 * 1024 * 10;
 let storage: Record<string, string> = {};
@@ -42,7 +42,7 @@ async function saveStorage(newStorage: Record<string, string>) {
 
     if (!fileExist) {
         await fs.mkdir(path.resolve(storagePath, ".."), {
-            recursive: true
+            recursive: true,
         });
     }
     storage = newStorage;
@@ -56,7 +56,7 @@ async function setItem(key: string, value: unknown) {
     }
     const newStorage = {
         ...storage,
-        [key]: typeof value === "string" ? value : value?.toString?.()
+        [key]: typeof value === "string" ? value : value?.toString?.(),
     };
     await saveStorage(newStorage);
 }
@@ -73,7 +73,7 @@ async function removeItem(key: string) {
         await loadStorage();
     }
     const newStorage = {
-      ...storage,
+        ...storage,
     };
     delete newStorage[key];
     await saveStorage(newStorage);
@@ -82,5 +82,5 @@ async function removeItem(key: string) {
 export default {
     setItem,
     getItem,
-    removeItem
-}
+    removeItem,
+};

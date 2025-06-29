@@ -1,5 +1,5 @@
-import {PlayerState} from "@/common/constant";
-import {CurrentTime, ErrorReason} from "@renderer/core/track-player/enum";
+import { PlayerState } from "@/common/constant";
+import { CurrentTime, ErrorReason } from "@renderer/core/track-player/enum";
 
 export interface IInternalSetTrackOptions { // 与 audio-controller.ts 中定义一致
     seekTo?: number;

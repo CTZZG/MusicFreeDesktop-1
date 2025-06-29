@@ -1,4 +1,4 @@
-import {contextBridge, ipcRenderer} from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 
 ipcRenderer.on("@/shared/plugin-manager/sync-plugins", (_evt, newPlugins) => {
     pluginUpdateCallback?.(newPlugins);
@@ -17,7 +17,7 @@ interface IPluginDelegateLike {
 }
 
 async function callPluginMethod<
-    T extends keyof IPlugin.IPluginInstanceMethods
+    T extends keyof IPlugin.IPluginInstanceMethods,
 >(
     pluginDelegate: IPluginDelegateLike,
     method: T,
@@ -59,7 +59,7 @@ const mod = {
     uninstallPlugin,
     updateAllPlugins,
     installPluginFromLocal,
-    installPluginFromRemote
+    installPluginFromRemote,
 };
 
 contextBridge.exposeInMainWorld("@shared/plugin-manager", mod);

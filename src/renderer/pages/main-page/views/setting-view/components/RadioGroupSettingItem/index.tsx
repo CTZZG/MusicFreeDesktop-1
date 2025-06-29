@@ -1,8 +1,8 @@
-import {RadioGroup} from "@headlessui/react";
+import { RadioGroup } from "@headlessui/react";
 import "./index.scss";
 import SvgAsset from "@/renderer/components/SvgAsset";
 import classNames from "@/renderer/utils/classnames";
-import {IAppConfig} from "@/types/app-config";
+import { IAppConfig } from "@/types/app-config";
 import useAppConfig from "@/hooks/useAppConfig";
 import AppConfig from "@shared/app-config/renderer";
 
@@ -16,14 +16,14 @@ interface IRadioGroupSettingItemProps<T extends keyof IAppConfig> {
 }
 
 export default function RadioGroupSettingItem<T extends keyof IAppConfig>(
-    props: IRadioGroupSettingItemProps<T>
+    props: IRadioGroupSettingItemProps<T>,
 ) {
     const {
         keyPath,
         label,
         options,
         direction = "horizontal",
-        renderItem
+        renderItem,
     } = props;
 
     const value = useAppConfig(keyPath);
@@ -34,8 +34,8 @@ export default function RadioGroupSettingItem<T extends keyof IAppConfig>(
                 value={value}
                 onChange={(val) => {
                     AppConfig.setConfig({
-                        [keyPath]: val
-                    })
+                        [keyPath]: val,
+                    });
                 }}
             >
                 <RadioGroup.Label className={"label-container"}>
@@ -49,7 +49,7 @@ export default function RadioGroupSettingItem<T extends keyof IAppConfig>(
                 >
                     {options.map((option, index) => (
                         <RadioGroup.Option key={index} value={option}>
-                            {({checked}) => {
+                            {({ checked }) => {
                                 const title = renderItem ? renderItem(option) : option as string;
                                 return (
                                     <div

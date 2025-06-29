@@ -1,22 +1,22 @@
-import {app, BrowserWindow, globalShortcut} from "electron";
+import { app, BrowserWindow, globalShortcut } from "electron";
 import fs from "fs";
 import path from "path";
 import os from 'os';
-import {setAutoFreeze} from "immer";
-import {setupGlobalContext} from "@/shared/global-context/main";
-import {setupI18n} from "@/shared/i18n/main";
-import {handleDeepLink} from "./deep-link";
+import { setAutoFreeze } from "immer";
+import { setupGlobalContext } from "@/shared/global-context/main";
+import { setupI18n } from "@/shared/i18n/main";
+import { handleDeepLink } from "./deep-link";
 import logger from "@shared/logger/main";
-import {PlayerState} from "@/common/constant";
-import ThumbBarUtil from "@/common/main/thumb-bar-util";
+import { PlayerState } from "@/common/constant";
+import ThumbBarUtil from "@/common/thumb-bar-util";
 import windowManager from "@main/window-manager";
 import AppConfig from "@shared/app-config/main";
 import TrayManager from "@main/tray-manager";
 import mpvController from './player/mpv-controller'; // [新增] 引入
 import WindowDrag from "@shared/window-drag/main";
-import {IAppConfig} from "@/types/app-config";
+import { IAppConfig } from "@/types/app-config";
 import axios from "axios";
-import {HttpsProxyAgent} from "https-proxy-agent";
+import { HttpsProxyAgent } from "https-proxy-agent";
 import PluginManager from "@shared/plugin-manager/main";
 import ServiceManager from "@shared/service-manager/main";
 import utils from "@shared/utils/main";
@@ -131,11 +131,11 @@ app.whenReady().then(async () => {
         },
         onLanguageChanged(lang) {
             AppConfig.setConfig({
-                "normal.language": lang
+                "normal.language": lang,
             });
             if (process.platform === "win32") {
 
-                ThumbBarUtil.setThumbBarButtons(windowManager.mainWindow, messageBus.getAppState().playerState === PlayerState.Playing)
+                ThumbBarUtil.setThumbBarButtons(windowManager.mainWindow, messageBus.getAppState().playerState === PlayerState.Playing);
             }
         },
     });
@@ -160,7 +160,7 @@ app.whenReady().then(async () => {
                 }
                 if (musicItem) {
                     mainWindow.setTitle(
-                        musicItem.title + (musicItem.artist ? ` - ${musicItem.artist}` : "")
+                        musicItem.title + (musicItem.artist ? ` - ${musicItem.artist}` : ""),
                     );
                 } else {
                     mainWindow.setTitle(app.getName());
@@ -171,7 +171,7 @@ app.whenReady().then(async () => {
             const playerState = patch.playerState;
 
             if (process.platform === "win32") {
-                ThumbBarUtil.setThumbBarButtons(windowManager.mainWindow, playerState === PlayerState.Playing)
+                ThumbBarUtil.setThumbBarButtons(windowManager.mainWindow, playerState === PlayerState.Playing);
             }
         } else if ("repeatMode" in patch) {
             TrayManager.buildTrayMenu();
@@ -182,7 +182,7 @@ app.whenReady().then(async () => {
                 TrayManager.setTitle("");
             }
         }
-    })
+    });
 
     messageBus.setup(windowManager);
     setupPlayerHandlers(); // [新增] 调用设置函数
@@ -199,7 +199,7 @@ async function bootstrap() {
     const downloadPath = AppConfig.getConfig("download.path");
     if (!downloadPath) {
         AppConfig.setConfig({
-            "download.path": app.getPath("downloads")
+            "download.path": app.getPath("downloads"),
         });
     }
 
@@ -210,7 +210,7 @@ async function bootstrap() {
     }
 
     /** 一些初始化设置 */
-        // 初始化桌面歌词
+    // 初始化桌面歌词
     const desktopLyricEnabled = AppConfig.getConfig("lyric.enableDesktopLyric");
 
     if (desktopLyricEnabled) {
@@ -242,7 +242,7 @@ async function bootstrap() {
                 shortCut.unregisterAllGlobalShortCuts();
             }
         }
-    })
+    });
 
 
     // 初始化代理
@@ -251,7 +251,7 @@ async function bootstrap() {
         "network.proxy.host",
         "network.proxy.port",
         "network.proxy.username",
-        "network.proxy.password"
+        "network.proxy.password",
     ];
 
     AppConfig.onConfigUpdated((patch, config) => {
@@ -277,7 +277,7 @@ async function bootstrap() {
         AppConfig.getConfig("network.proxy.host"),
         AppConfig.getConfig("network.proxy.port"),
         AppConfig.getConfig("network.proxy.username"),
-        AppConfig.getConfig("network.proxy.password")
+        AppConfig.getConfig("network.proxy.password"),
     );
 
 

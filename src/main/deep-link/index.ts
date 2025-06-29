@@ -1,5 +1,5 @@
-import {supportLocalMediaType} from "@/common/constant";
-import {parseLocalMusicItem, safeStat} from "@/common/file-util";
+import { supportLocalMediaType } from "@/common/constant";
+import { parseLocalMusicItem, safeStat } from "@/common/file-util";
 import PluginManager from "@shared/plugin-manager/main";
 import voidCallback from "@/common/void-callback";
 import messageBus from "@shared/message-bus/main";
@@ -27,7 +27,7 @@ async function handleMusicFreeScheme(url: URL) {
                 url.pathname.slice(1) || url.searchParams.get("plugin");
             const pluginUrls = pluginUrlStr.split(",").map(decodeURIComponent);
             await Promise.all(
-                pluginUrls.map((it) => PluginManager.installPluginFromRemoteUrl(it).catch(voidCallback))
+                pluginUrls.map((it) => PluginManager.installPluginFromRemoteUrl(it).catch(voidCallback)),
             );
         } catch {
             // pass

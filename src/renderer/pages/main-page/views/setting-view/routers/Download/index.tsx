@@ -3,7 +3,7 @@ import RadioGroupSettingItem from "../../components/RadioGroupSettingItem";
 import ListBoxSettingItem from "../../components/ListBoxSettingItem";
 import Downloader from "@/renderer/core/downloader";
 import PathSettingItem from "../../components/PathSettingItem";
-import {useTranslation} from "react-i18next";
+import { useTranslation } from "react-i18next";
 
 
 const concurrencyList = Array(20)
@@ -12,7 +12,7 @@ const concurrencyList = Array(20)
 
 
 export default function Download() {
-    const {t} = useTranslation();
+    const { t } = useTranslation();
 
     return (
         <div className="setting-view--download-container">
@@ -35,7 +35,7 @@ export default function Download() {
                     "low",
                     "standard",
                     "high",
-                    "super"
+                    "super",
                 ]}
                 renderItem={(item) => t("media.music_quality_" + item)}
             ></RadioGroupSettingItem>
@@ -44,7 +44,7 @@ export default function Download() {
                 keyPath="download.whenQualityMissing"
                 options={[
                     "lower",
-                    "higher"
+                    "higher",
                 ]}
                 renderItem={(item) => t("settings.download.download_" + item + "_quality_version")}
 

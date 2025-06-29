@@ -1,9 +1,9 @@
-import {app, BrowserWindow, dialog, ipcMain, shell} from "electron";
-import {IWindowManager} from "@/types/main/window-manager";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { IWindowManager } from "@/types/main/window-manager";
 import fs from "fs/promises";
-import {appUpdateSources} from "@/common/constant";
+import { appUpdateSources } from "@/common/constant";
 import axios from "axios";
-import {compare} from "compare-versions";
+import { compare } from "compare-versions";
 
 class Utils {
     private windowManager: IWindowManager;
@@ -59,11 +59,11 @@ class Utils {
                 return mainWindow.webContents.session.getCacheSize?.();
             }
             return NaN;
-        })
+        });
     }
 
     private setupWindowUtil() {
-        ipcMain.on("@shared/utils/min-main-window", (_, {skipTaskBar}) => {
+        ipcMain.on("@shared/utils/min-main-window", (_, { skipTaskBar }) => {
             const mainWindow = this.windowManager.mainWindow;
             if (mainWindow) {
                 if (skipTaskBar) {
@@ -77,7 +77,7 @@ class Utils {
 
         ipcMain.on("@shared/utils/show-main-window", () => {
             this.windowManager.showMainWindow();
-        })
+        });
 
         ipcMain.on("@shared/utils/set-lyric-window", (_, enabled) => {
             if (enabled) {
@@ -116,7 +116,7 @@ class Utils {
                     mainWindow.maximize();
                 }
             }
-        })
+        });
 
         ipcMain.on("@shared/utils/toggle-main-window-visible", () => {
             const mainWindow = this.windowManager.mainWindow;
@@ -127,7 +127,7 @@ class Utils {
                 mainWindow.hide();
                 mainWindow.setSkipTaskbar(true);
             }
-        })
+        });
 
     }
 
@@ -138,7 +138,7 @@ class Utils {
 
         ipcMain.on("@shared/utils/open-path", (_, path) => {
             shell.openPath(path);
-        })
+        });
 
         ipcMain.handle("@shared/utils/show-item-in-folder", async (_, path) => {
             try {
@@ -148,7 +148,7 @@ class Utils {
             } catch {
                 return false;
             }
-        })
+        });
     }
 
     private setupDialogUtil() {

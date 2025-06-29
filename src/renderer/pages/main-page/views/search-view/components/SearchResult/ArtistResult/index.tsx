@@ -1,10 +1,10 @@
-import {RequestStateCode} from "@/common/constant";
+import { RequestStateCode } from "@/common/constant";
 import BottomLoadingState from "@/renderer/components/BottomLoadingState";
 
 import useSearch from "../../../hooks/useSearch";
 import ArtistItem from "@/renderer/components/ArtistItem";
 import "./index.scss";
-import {useNavigate} from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 interface IMediaResultProps {
     data: IArtist.IArtistItem[];
@@ -13,7 +13,7 @@ interface IMediaResultProps {
 }
 
 export default function ArtistResult(props: IMediaResultProps) {
-    const {data, state, pluginHash} = props;
+    const { data, state, pluginHash } = props;
 
     const search = useSearch();
     const navigate = useNavigate();
@@ -27,9 +27,9 @@ export default function ArtistResult(props: IMediaResultProps) {
                             `/main/artist/${encodeURIComponent(artistItem.platform)}/${encodeURIComponent(artistItem.id)}`,
                             {
                                 state: {
-                                    artistItem
+                                    artistItem,
                                 },
-                            }
+                            },
                         );
                     }}></ArtistItem>;
                 })}

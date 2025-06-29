@@ -1,4 +1,4 @@
-import {getUserPreferenceIDB, setUserPreferenceIDB} from "./user-perference";
+import { getUserPreferenceIDB, setUserPreferenceIDB } from "./user-perference";
 import AppConfig from "@shared/app-config/renderer";
 
 export async function getSearchHistory() {
@@ -18,7 +18,7 @@ export async function addSearchHistory(searchItem: string) {
 export async function removeSearchHistory(searchItem: string) {
     const oldSearchHistory = await getSearchHistory();
     const newSearchHistory = oldSearchHistory.filter(
-        (item) => item !== searchItem
+        (item) => item !== searchItem,
     );
     await setUserPreferenceIDB("searchHistory", newSearchHistory);
 }

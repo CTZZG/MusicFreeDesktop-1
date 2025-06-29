@@ -2,7 +2,7 @@
  * https://github.com/electron/electron/issues/1354#issuecomment-1356330873
  */
 
-import {BrowserWindow, ipcMain } from "electron";
+import { BrowserWindow, ipcMain } from "electron";
 import * as process from "node:process";
 import debounce from "@/common/debounce";
 
@@ -20,9 +20,9 @@ interface IDragOptions {
 
 const makeWin32WindowFullyDraggable = (
     browserWindow: BrowserWindow,
-    options: IDragOptions
+    options: IDragOptions,
 ): void => {
-    const {height, width, getWindowSize, onDragEnd} = options;
+    const { height, width, getWindowSize, onDragEnd } = options;
     const initialPos = {
         x: 0,
         y: 0,
@@ -84,7 +84,7 @@ const makeWin32WindowFullyDraggable = (
                 height: initialPos.height,
                 width: initialPos.width,
             });
-        }
+        },
     );
 };
 
@@ -94,7 +94,7 @@ class WindowDrag {
 
     setup(): void {
         ipcMain.on("set-window-draggable", (_evt, position) => {
-            const window = BrowserWindow.fromWebContents(_evt.sender)
+            const window = BrowserWindow.fromWebContents(_evt.sender);
             if (this.registeredWindows.has(window)) {
                 const metadata = this.registeredWindows.get(window);
                 let width = metadata.width;
@@ -108,11 +108,11 @@ class WindowDrag {
                     x: position.x,
                     y: position.y,
                     height: height,
-                    width: width
+                    width: width,
                 });
                 metadata.onDragEnd?.(position);
             }
-        })
+        });
     }
 
     setWindowDraggable(window: BrowserWindow, options: IDragOptions): void {
@@ -124,12 +124,12 @@ class WindowDrag {
                 originalDragEnd?.(position);
             }, 300, {
                 leading: false,
-                trailing: true
-            })
+                trailing: true,
+            });
             this.registeredWindows.set(window, options);
             window.on("closed", () => {
                 this.registeredWindows.delete(window);
-            })
+            });
         }
 
     }

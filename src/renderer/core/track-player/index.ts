@@ -1,4 +1,4 @@
-import { CurrentTime, ICurrentLyric, PlayerEvents, } from "./enum";
+import { CurrentTime, ICurrentLyric, PlayerEvents } from "./enum";
 import shuffle from "lodash.shuffle";
 import {
     addSortProperty,
@@ -40,7 +40,7 @@ const {
     currentVolumeStore,
     currentSpeedStore,
     currentQualityStore,
-    resetProgress
+    resetProgress,
 } = _trackPlayerStore;
 
 
@@ -86,7 +86,7 @@ class TrackPlayer {
             id: currentMusic.id,
             album: currentMusic.album,
             artwork: currentMusic.artwork,
-        } as IMusic.IMusicItem
+        } as IMusic.IMusicItem;
     }
 
     get progress() {
@@ -157,11 +157,11 @@ class TrackPlayer {
 
         navigator.mediaSession.setActionHandler("nexttrack", () => {
             this.skipToNext();
-        })
+        });
 
         navigator.mediaSession.setActionHandler("previoustrack", () => {
             this.skipToPrev();
-        })
+        });
     }
 
 
@@ -190,7 +190,7 @@ class TrackPlayer {
             getUserPreference("currentProgress"),
             getUserPreference("volume"),
             getUserPreference("speed"),
-            getUserPreference("currentQuality") || AppConfig.getConfig("playMusic.defaultQuality")
+            getUserPreference("currentQuality") || AppConfig.getConfig("playMusic.defaultQuality"),
         ];
         const playList = ((await getUserPreferenceIDB("playList")) ?? []).filter(it => !!it);
         addSortProperty(playList);
@@ -335,7 +335,7 @@ class TrackPlayer {
             this.setCurrentQuality(quality);
             this.setTrack(mediaSource, nextMusicItem, {
                 seekTo,
-                autoPlay: true
+                autoPlay: true,
             });
 
             // extra information
@@ -344,7 +344,7 @@ class TrackPlayer {
                     platform: nextMusicItem.platform,
                 },
                 "getMusicInfo",
-                nextMusicItem
+                nextMusicItem,
             ).catch(voidCallback);
 
             if (!(musicInfo && this.isCurrentMusic(nextMusicItem) && typeof musicInfo === "object")) {
@@ -380,9 +380,9 @@ class TrackPlayer {
                 {
                     ...musicItem,
                     [timeStampSymbol]: Date.now(),
-                    [sortIndexSymbol]: 0
-                }
-            ]
+                    [sortIndexSymbol]: 0,
+                },
+            ];
             this.setMusicQueue(newQueue);
             await this.playIndex(newQueue.length - 1, options);
         } else {
@@ -540,7 +540,7 @@ class TrackPlayer {
         const newQueue = [
             ...startPart,
             ..._musicItems,
-            ...tailPart
+            ...tailPart,
         ];
 
         this.setMusicQueue(newQueue);
@@ -594,12 +594,12 @@ class TrackPlayer {
     public async setQuality(quality: IMusic.IQualityKey) {
         const currentMusic = this.currentMusic;
         if (currentMusic && quality !== this.currentQuality) {
-            const { mediaSource, quality: realQuality } = await this.fetchMediaSource(currentMusic, quality)
+            const { mediaSource, quality: realQuality } = await this.fetchMediaSource(currentMusic, quality);
             if (this.isCurrentMusic(currentMusic)) {
                 this.setTrack(mediaSource, currentMusic, {
                     seekTo: this.progress.currentTime ?? 0,
-                    autoPlay: this.playerState === PlayerState.Playing
-                })
+                    autoPlay: this.playerState === PlayerState.Playing,
+                });
                 this.setCurrentQuality(realQuality);
             }
         }
@@ -657,14 +657,14 @@ class TrackPlayer {
                 lyricSource = await PluginManager.callPluginDelegateMethod(
                     linkedLyricItem,
                     "getLyric",
-                    linkedLyricItem
-                )
+                    linkedLyricItem,
+                );
             }
             if (!lyricSource && this.isCurrentMusic(currentMusic)) {
                 lyricSource = await PluginManager.callPluginDelegateMethod(
                     currentMusic,
                     "getLyric",
-                    currentMusic
+                    currentMusic,
                 );
             }
 
@@ -677,12 +677,12 @@ class TrackPlayer {
             }
             const parser = new LyricParser(lyricSource.rawLrc, {
                 musicItem: currentMusic,
-                translation: lyricSource.translation
+                translation: lyricSource.translation,
             });
 
             this.setCurrentLyric({
                 parser,
-                currentLrc: parser.getPosition(this.progress.currentTime || 0)
+                currentLrc: parser.getPosition(this.progress.currentTime || 0),
             });
         } catch (e) {
             logger.logError("歌词解析失败", e);
@@ -705,7 +705,7 @@ class TrackPlayer {
         // 1. 判断是否已下载
         const downloadedData = getInternalData<IMusic.IMusicItemInternalData>(
             musicItem,
-            "downloadData"
+            "downloadData",
         );
         if (downloadedData) {
             const { quality, path: _path } = downloadedData;
@@ -730,7 +730,7 @@ class TrackPlayer {
                     },
                     "getMediaSource",
                     musicItem,
-                    quality
+                    quality,
                 );
                 if (!mediaSource?.url) {
                     continue;
@@ -743,8 +743,8 @@ class TrackPlayer {
         }
         return {
             quality: realQuality,
-            mediaSource: mediaSource
-        }
+            mediaSource: mediaSource,
+        };
     }
 
 
@@ -820,7 +820,9 @@ class TrackPlayer {
         removeUserPreference("currentProgress");
     }
 
-    private setTrack(mediaSource: IPlugin.IMediaSourceResult, musicItem: IMusic.IMusicItem, options: ITrackOptions = { autoPlay: true }) {
+    private setTrack(mediaSource: IPlugin.IMediaSourceResult, musicItem: IMusic.IMusicItem, options: ITrackOptions = {
+        autoPlay: true,
+    }) {
         this.resetProgress();
 
         console.log(`[Renderer] Sending 'mpvPlay' command for track: ${musicItem.title}`, { url: mediaSource.url });

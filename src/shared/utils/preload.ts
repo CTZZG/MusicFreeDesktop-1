@@ -1,6 +1,6 @@
-import {contextBridge, ipcRenderer} from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 import fs from "fs/promises";
-import {rimraf} from "rimraf";
+import { rimraf } from "rimraf";
 import url from "url";
 
 
@@ -46,8 +46,8 @@ const fsUtil = {
     isFile,
     isFolder,
     rimraf,
-    addFileScheme
-}
+    addFileScheme,
+};
 
 /****** app utils *****/
 function exitApp() {
@@ -75,13 +75,13 @@ const app = {
     getPath,
     checkUpdate,
     getCacheSize,
-    clearCache
-}
+    clearCache,
+};
 
 
 /****** window utils *****/
 function minMainWindow(skipTaskBar: boolean) {
-    ipcRenderer.send("@shared/utils/min-main-window", {skipTaskBar});
+    ipcRenderer.send("@shared/utils/min-main-window", { skipTaskBar });
 }
 
 function showMainWindow() {
@@ -115,8 +115,8 @@ const appWindow = {
     setMinimodeWindow,
     ignoreMouseEvent,
     toggleMainWindowVisible,
-    toggleMainWindowMaximize
-}
+    toggleMainWindowMaximize,
+};
 
 /****** shell utils *****/
 function openExternal(url: string) {
@@ -134,8 +134,8 @@ async function showItemInFolder(path: string): Promise<boolean> {
 const shell = {
     openExternal,
     openPath,
-    showItemInFolder
-}
+    showItemInFolder,
+};
 
 /****** dialog utils *****/
 function showOpenDialog(options: Electron.OpenDialogOptions): Promise<Electron.OpenDialogReturnValue> {
@@ -148,8 +148,8 @@ function showSaveDialog(options: Electron.SaveDialogOptions): Promise<Electron.S
 
 const dialog = {
     showOpenDialog,
-    showSaveDialog
-}
+    showSaveDialog,
+};
 
 
 const mod = {
@@ -157,8 +157,8 @@ const mod = {
     app,
     appWindow,
     shell,
-    dialog
-}
+    dialog,
+};
 
 contextBridge.exposeInMainWorld("@shared/utils", mod);
 

@@ -1,9 +1,9 @@
-import {useRef} from "react";
+import { useRef } from "react";
 import Base from "../Base";
 import "./index.scss";
-import {hidePanel} from "../..";
-import {toast} from "react-toastify";
-import {useTranslation} from "react-i18next";
+import { hidePanel } from "../..";
+import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 import AppConfig from "@shared/app-config/renderer";
 
 interface IUserVariablesProps {
@@ -13,10 +13,10 @@ interface IUserVariablesProps {
 }
 
 export default function (props: IUserVariablesProps) {
-    const {variables = [], initValues = {}, plugin} = props;
+    const { variables = [], initValues = {}, plugin } = props;
 
-    const valueRef = useRef<Record<string, string>>({...(initValues ?? {})});
-    const {t} = useTranslation();
+    const valueRef = useRef<Record<string, string>>({ ...(initValues ?? {}) });
+    const { t } = useTranslation();
 
     return (
         <Base>
@@ -32,7 +32,7 @@ export default function (props: IUserVariablesProps) {
                             currentConfig[plugin.platform] = currentPluginConfig;
                             AppConfig.setConfig({
                                 "private.pluginMeta": currentConfig,
-                            })
+                            });
 
                             hidePanel();
                             toast.success(t("panel.user_variable_setting_success"));
@@ -47,9 +47,9 @@ export default function (props: IUserVariablesProps) {
             <div className="panel--user-variables-container">
                 {variables.map((variable) => (
                     <div className="panel--user-variable-item" key={variable.key}>
-            <span title={variable.name ?? variable.key}>
-              {variable.name ?? variable.key}
-            </span>
+                        <span title={variable.name ?? variable.key}>
+                            {variable.name ?? variable.key}
+                        </span>
                         <input
                             spellCheck={false}
                             defaultValue={initValues[variable.key]}

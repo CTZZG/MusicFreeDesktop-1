@@ -1,5 +1,5 @@
-import {defaultFont} from "@/common/constant";
-import {IAppConfig} from "@/types/app-config";
+import { defaultFont } from "@/common/constant";
+import { IAppConfig } from "@/types/app-config";
 
 const _defaultAppConfig: IAppConfig =  {
     "$schema-version": 1,
@@ -27,8 +27,8 @@ const _defaultAppConfig: IAppConfig =  {
     "download.concurrency": 5,
     "normal.musicListColumnsShown": [],
     "backup.resumeBehavior": "append",
-    "normal.language": "zh-CN"
-}
+    "normal.language": "zh-CN",
+};
 
 
 export default _defaultAppConfig;

@@ -1,7 +1,7 @@
 import "./index.scss";
 import SvgAsset from "@/renderer/components/SvgAsset";
 import classNames from "@/renderer/utils/classnames";
-import {IAppConfig} from "@/types/app-config";
+import { IAppConfig } from "@/types/app-config";
 import useAppConfig from "@/hooks/useAppConfig";
 import AppConfig from "@shared/app-config/renderer";
 
@@ -21,7 +21,7 @@ interface IRadioGroupSettingItemProps<T extends keyof IAppConfig> {
  * @constructor
  */
 export default function MultiRadioGroupSettingItem<T extends keyof IAppConfig>(
-    props: IRadioGroupSettingItemProps<T>
+    props: IRadioGroupSettingItemProps<T>,
 ) {
     const {
         keyPath,
@@ -58,16 +58,16 @@ export default function MultiRadioGroupSettingItem<T extends keyof IAppConfig>(
                                 let newValue = [];
                                 if (checked) {
                                     newValue = (value as Array<any>)?.filter(
-                                        (it) => it !== option
-                                    ) ?? []
+                                        (it) => it !== option,
+                                    ) ?? [];
 
                                 } else {
                                     newValue = [...(value as Array<any> || []), option];
 
                                 }
                                 AppConfig.setConfig({
-                                    [keyPath]: newValue
-                                })
+                                    [keyPath]: newValue,
+                                });
                             }}
                         >
                             <div className="checkbox">

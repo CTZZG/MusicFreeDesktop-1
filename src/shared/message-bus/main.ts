@@ -1,7 +1,7 @@
-import {IAppState, ICommand} from "@shared/message-bus/type";
-import {IWindowManager} from "@/types/main/window-manager";
-import {BrowserWindow, ipcMain, MessageChannelMain} from "electron";
-import {PlayerState, RepeatMode} from "@/common/constant";
+import { IAppState, ICommand } from "@shared/message-bus/type";
+import { IWindowManager } from "@/types/main/window-manager";
+import { BrowserWindow, ipcMain, MessageChannelMain } from "electron";
+import { PlayerState, RepeatMode } from "@/common/constant";
 import EventEmitter from "eventemitter3";
 
 /**
@@ -35,12 +35,12 @@ class MessageBus {
             if (data.windowName !== "main") {
                 this.createPortForExtensionWindow(data.browserWindow);
             }
-        })
+        });
 
         ipcMain.on("@shared/message-bus/sync-app-state", (_, data: IAppState) => {
             this.appState = {
                 ...this.appState,
-                ...data
+                ...data,
             };
             this.ee.emit("stateChanged", this.appState, data);
         })
@@ -89,9 +89,9 @@ class MessageBus {
                 type: "command",
                 payload: {
                     command,
-                    data
+                    data,
                 },
-                timestamp: Date.now()
+                timestamp: Date.now(),
             });
         }
     }
@@ -106,7 +106,7 @@ class MessageBus {
         if (!mainWindow || bWindow === mainWindow) {
             return;
         }
-        const {port1, port2} = new MessageChannelMain();
+        const { port1, port2 } = new MessageChannelMain();
         const extWindowId = bWindow.id;
         this.extensionWindowIds.add(extWindowId);
 
@@ -114,7 +114,7 @@ class MessageBus {
         mainWindow.webContents.postMessage("port", {
             payload: extWindowId,
             type: "mount",
-            timestamp: Date.now()
+            timestamp: Date.now(),
         }, [port1]);
 
         bWindow.webContents.postMessage("port", null, [port2]);
@@ -122,10 +122,10 @@ class MessageBus {
             mainWindow.webContents.postMessage("port", {
                 payload: extWindowId,
                 type: "unmount",
-                timestamp: Date.now()
+                timestamp: Date.now(),
             });
             this.extensionWindowIds.delete(extWindowId);
-        })
+        });
 
     }
 }

@@ -265,6 +265,7 @@
     },
     "normal": {
       "check_update": "啟動應用時檢查更新",
+      "auto_load_more": "(歌單頁) 滑動到頁面底部時自動加載更多",
       "close_behavior": "點擊退出按鈕時",
       "exit_app": "退出應用",
       "minimize": "最小化到系統托盤",

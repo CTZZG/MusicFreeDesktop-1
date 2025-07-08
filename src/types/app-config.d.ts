@@ -3,6 +3,7 @@ interface _IAppConfig {
     "normal.closeBehavior": "exit_app" | "minimize";
     "normal.maxHistoryLength": number;
     "normal.checkUpdate": boolean;
+    "normal.autoLoadMore": boolean;
     "normal.taskbarThumb": "window" | "artwork";
     "normal.musicListColumnsShown": Array<"duration" | "platform">;
     "normal.language": string;

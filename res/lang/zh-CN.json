@@ -243,6 +243,7 @@
     },
     "normal": {
       "check_update": "应用启动时检测软件版本更新",
+      "auto_load_more": "(歌单页) 滑动到页面底部时自动加载更多",
       "close_behavior": "单击退出按钮时",
       "exit_app": "退出应用",
       "minimize": "最小化到托盘",

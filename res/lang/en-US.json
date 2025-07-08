@@ -265,6 +265,7 @@
     },
     "normal": {
       "check_update": "Check for updates on startup",
+      "auto_load_more": "(Playlist Page) Automatically load more when scrolling to the bottom",
       "close_behavior": "When clicking exit button",
       "exit_app": "Exit App",
       "minimize": "Minimize to tray",

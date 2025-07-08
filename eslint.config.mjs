@@ -52,7 +52,7 @@ export default [
             "import/no-useless-path-segments": "error",            // 企业级最佳实践
             "@typescript-eslint/no-unused-vars": ["warn", {
                 "argsIgnorePattern": "^_",
-                "varsIgnorePattern": "^_"
+                "varsIgnorePattern": "^_",
             }],
             "@typescript-eslint/no-non-null-assertion": "warn",
             "no-console": "warn",
@@ -61,13 +61,13 @@ export default [
             "import/resolver": {
                 "typescript": {
                     "alwaysTryTypes": true,
-                    "project": "./tsconfig.json"
+                    "project": "./tsconfig.json",
                 },
                 "node": {
-                    "extensions": [".js", ".jsx", ".ts", ".tsx"]
-                }
-            }
-        }
+                    "extensions": [".js", ".jsx", ".ts", ".tsx"],
+                },
+            },
+        },
     },
 
     // 特定于主进程的配置
@@ -80,7 +80,7 @@ export default [
         },
         rules: {
             "no-console": "off", // 主进程允许使用 console
-        }
+        },
     },
 
     // 特定于渲染进程的配置  
@@ -99,7 +99,7 @@ export default [
         rules: {
             "@typescript-eslint/no-var-requires": "off",
             "no-console": "off",
-        }
+        },
     },
 
     // 忽略文件
@@ -110,7 +110,7 @@ export default [
             ".webpack/**",
             "out/**",
             "release/**",
-            "**/*.d.ts"
-        ]
-    }
+            "**/*.d.ts",
+        ],
+    },
 ];

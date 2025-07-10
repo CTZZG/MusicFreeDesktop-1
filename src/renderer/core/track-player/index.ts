@@ -323,8 +323,8 @@ class TrackPlayer {
         try {
             const { mediaSource, quality } = await this.fetchMediaSource(nextMusicItem, intendedQuality);
 
-            if (!mediaSource.url) {
-                throw new Error("mediaSource.url is empty");
+            if (!mediaSource) {
+                throw new Error("Failed to fetch media source");
             }
 
             if (!this.isCurrentMusic(nextMusicItem)) {

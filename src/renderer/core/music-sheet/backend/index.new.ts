@@ -303,6 +303,9 @@ export async function getSheetItemDetail(
  * @returns
  */
 export function isFavoriteMusic(musicItem: IMusic.IMusicItem) {
+    if (!musicItem) {
+        return false;
+    }
     return database.LocalMusicSheetDB.existsMusicItemInSheet(musicItem.platform, "" + musicItem.id, localPluginName, defaultSheet.id);
 }
 

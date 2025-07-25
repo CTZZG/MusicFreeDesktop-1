@@ -141,6 +141,8 @@ class TrackPlayer {
         this.ee.on(event, callback as any);
     }
 
+    private previousMusicItem: IMusic.IMusicItem | null = null;
+
     private setupEvents() {
         this.ee.on(PlayerEvents.Error, async (errorMusicItem) => {
             // config
@@ -161,6 +163,58 @@ class TrackPlayer {
 
         navigator.mediaSession.setActionHandler("previoustrack", () => {
             this.skipToPrev();
+        });
+
+        this.ee.on(PlayerEvents.MusicChanged, (musicItem) => {
+            if (this.previousMusicItem && this.previousMusicItem.platform) {
+                if (PluginManager.isSupportFeatureMethod(this.previousMusicItem.platform, "onPlaybackStateChange")) {
+                    PluginManager.callPluginDelegateMethod(
+                        this.previousMusicItem,
+                        "onPlaybackStateChange",
+                        "track-change",
+                        { musicItem: this.previousMusicItem },
+                    );
+                }
+            }
+        });
+
+        this.ee.on(PlayerEvents.StateChanged, (state) => {
+            const musicItem = this.currentMusic;
+            if (!musicItem || !musicItem.platform) return;
+
+            if (PluginManager.isSupportFeatureMethod(musicItem.platform, "onPlaybackStateChange")) {
+                let eventType: "play" | "pause" | "stop" | null = null;
+                if (state === PlayerState.Playing) eventType = "play";
+                else if (state === PlayerState.Paused) eventType = "pause";
+                else if (state === PlayerState.None) eventType = "stop";
+
+                if (eventType) {
+                    PluginManager.callPluginDelegateMethod(
+                        musicItem,
+                        "onPlaybackStateChange",
+                        eventType,
+                        { musicItem },
+                    );
+                }
+            }
+        });
+
+        this.ee.on(PlayerEvents.ProgressChanged, (progress) => {
+            const musicItem = this.currentMusic;
+            if (!musicItem || !musicItem.platform) return;
+
+            if (PluginManager.isSupportFeatureMethod(musicItem.platform, "onPlaybackStateChange")) {
+                PluginManager.callPluginDelegateMethod(
+                    musicItem,
+                    "onPlaybackStateChange",
+                    "progress",
+                    { 
+                        musicItem,
+                        currentTime: progress.currentTime,
+                        duration: progress.duration,
+                    },
+                );
+            }
         });
     }
 
@@ -200,16 +254,16 @@ class TrackPlayer {
         this.setupEvents();
 
         // [新增] 监听主进程发来的播放完成事件
-        messageBus.onCommand('mpvFinished', () => {
+        messageBus.onCommand("mpvFinished", () => {
             this.handlePlaybackFinished();
         });
 
         // [修复] 监听主进程通过 appStatePatch 命令同步过来的状态
-        messageBus.onCommand('appStatePatch', (patch) => {
-            if ('playerState' in patch && patch.playerState) {
+        messageBus.onCommand("appStatePatch", (patch) => {
+            if ("playerState" in patch && patch.playerState) {
                 this.setPlayerState(patch.playerState);
             }
-            if ('progress' in patch && 'duration' in patch && typeof patch.progress === 'number' && typeof patch.duration === 'number') {
+            if ("progress" in patch && "duration" in patch && typeof patch.progress === "number" && typeof patch.duration === "number") {
                 const currentTime = patch.progress;
                 const duration = patch.duration;
 
@@ -249,7 +303,7 @@ class TrackPlayer {
         }
 
         if (currentProgress && this.progress.currentTime !== currentProgress) {
-             this.setProgress({ ...this.progress, currentTime: currentProgress });
+            this.setProgress({ ...this.progress, currentTime: currentProgress });
         }
 
 
@@ -259,14 +313,19 @@ class TrackPlayer {
         // 5. [修改] 如果有上次播放的歌曲，则预加载它，但不播放
         if (currentMusic) {
             this.fetchMediaSource(currentMusic, defaultQuality).then(({ mediaSource, quality }) => {
-                // 确保在获取音源期间，用户没有切换歌曲
                 if (this.isCurrentMusic(currentMusic) && mediaSource?.url) {
-                    console.log('[Renderer] Preloading track on setup:', currentMusic.title);
-                    messageBus.sendCommand('mpvLoad', { url: mediaSource.url });
+                    console.log(`[Renderer] Restoring track on setup: ${currentMusic.title} at ${currentProgress}s`);
+
+                    // 将 URL 和 seekTime 一起发送
+                    messageBus.sendCommand("mpvLoad", {
+                        url: mediaSource.url,
+                        seekTime: currentProgress,
+                    });
+
                     this.setCurrentQuality(quality);
                 }
             }).catch(e => {
-                console.error("Failed to preload track on setup:", e);
+                console.error("Failed to restore track on setup:", e);
             });
         }
     }
@@ -306,7 +365,7 @@ class TrackPlayer {
             }
             // [修复] 直接执行恢复播放的逻辑，而不是调用 resume()，以避免无限递归
             if (this.playerState !== PlayerState.Playing) {
-                messageBus.sendCommand('mpvTogglePause');
+                messageBus.sendCommand("mpvTogglePause");
                 this.setPlayerState(PlayerState.Playing);
             }
 
@@ -361,8 +420,8 @@ class TrackPlayer {
         } catch (e) {
             // 播放失败
             this.setCurrentQuality(AppConfig.getConfig("playMusic.defaultQuality"));
-            messageBus.sendCommand('mpvStop');
-            this.ee.emit(PlayerEvents.Error, nextMusicItem, e)
+            messageBus.sendCommand("mpvStop");
+            this.ee.emit(PlayerEvents.Error, nextMusicItem, e);
         }
 
 
@@ -424,7 +483,7 @@ class TrackPlayer {
 
     // 重置播放状态
     public reset() {
-        messageBus.sendCommand('mpvStop');
+        messageBus.sendCommand("mpvStop");
         this.setMusicQueue([]);
         this.setCurrentMusic(null);
         this.resetProgress();
@@ -432,7 +491,7 @@ class TrackPlayer {
         this.setPlayerState(PlayerState.None);
 
         // [新增] 发送一个完整的重置状态给主进程，确保插件安全
-        messageBus.sendCommand('appStatePatch', {
+        messageBus.sendCommand("appStatePatch", {
             musicItem: null,
             playerState: PlayerState.None,
             progress: 0,
@@ -440,16 +499,16 @@ class TrackPlayer {
             lyricText: null,
             parsedLrc: null,
             fullLyric: null,
-        })
+        });
     }
 
     public seekTo(seconds: number) {
-        messageBus.sendCommand('mpvSeek', seconds);
+        messageBus.sendCommand("mpvSeek", seconds);
     }
 
     public pause() {
         if (this.playerState === PlayerState.Playing) {
-            messageBus.sendCommand('mpvTogglePause');
+            messageBus.sendCommand("mpvTogglePause");
             this.setPlayerState(PlayerState.Paused);
         }
     }
@@ -460,13 +519,13 @@ class TrackPlayer {
         }
 
         if (this.playerState === PlayerState.Paused) {
-            messageBus.sendCommand('mpvTogglePause');
+            messageBus.sendCommand("mpvTogglePause");
             this.setPlayerState(PlayerState.Playing);
         } else if (this.playerState !== PlayerState.Playing) {
             console.log(`Resume: Player state is ${this.playerState}, re-issuing play command.`);
             await this.playIndex(this.currentIndex, {
                 restartOnSameMedia: false,
-                seekTo: this.progress.currentTime
+                seekTo: this.progress.currentTime,
             });
         }
     }
@@ -475,7 +534,7 @@ class TrackPlayer {
         currentVolumeStore.setValue(volume);
         setUserPreference("volume", volume);
         if (sendCommand) {
-            messageBus.sendCommand('mpvSetVolume', volume);
+            messageBus.sendCommand("mpvSetVolume", volume);
         }
     }
 
@@ -483,7 +542,7 @@ class TrackPlayer {
         currentSpeedStore.setValue(speed);
         setUserPreference("speed", speed);
         if (sendCommand) {
-            messageBus.sendCommand('mpvSetSpeed', speed);
+            messageBus.sendCommand("mpvSetSpeed", speed);
         }
     }
 
@@ -558,7 +617,7 @@ class TrackPlayer {
                 const musicItem = oldQueue[i];
                 if (uniqueMap.has(musicItem)) {
                     if (this.currentIndex === i) {
-                        messageBus.sendCommand('mpvStop');
+                        messageBus.sendCommand("mpvStop");
                         this.currentIndex = -1;
                         this.resetProgress();
                         this.setCurrentMusic(null);
@@ -578,7 +637,7 @@ class TrackPlayer {
                 return;
             }
             if (musicIndex === this.currentIndex) {
-                messageBus.sendCommand('mpvStop');
+                messageBus.sendCommand("mpvStop");
                 this.currentIndex = -1;
                 this.resetProgress();
                 this.setCurrentMusic(null);
@@ -614,9 +673,9 @@ class TrackPlayer {
         
         // [修改] 将循环状态同步到主进程
         if (repeatMode === RepeatMode.Loop) {
-            messageBus.sendCommand('mpvSetLoop', true);
+            messageBus.sendCommand("mpvSetLoop", true);
         } else {
-            messageBus.sendCommand('mpvSetLoop', false);
+            messageBus.sendCommand("mpvSetLoop", false);
         }
 
         repeatModeStore.setValue(repeatMode);
@@ -751,6 +810,7 @@ class TrackPlayer {
     // 只读数据的设置
     private setCurrentMusic(musicItem: IMusic.IMusicItem | null) {
         if (!this.isCurrentMusic(musicItem)) {
+            this.previousMusicItem = this.currentMusic;
             currentMusicStore.setValue(musicItem);
             this.ee.emit(PlayerEvents.MusicChanged, musicItem);
             this.fetchCurrentLyric();
@@ -763,7 +823,7 @@ class TrackPlayer {
                 // [新增] 当音乐停止时，也调用 resetProgress 以确保状态一致
                 this.resetProgress();
                 // [新增] 发送一个完整的重置状态给主进程
-                messageBus.sendCommand('appStatePatch', {
+                messageBus.sendCommand("appStatePatch", {
                     musicItem: null,
                     playerState: this.playerState, // 保持当前播放器状态（可能是None或Paused）
                     progress: 0,
@@ -826,17 +886,17 @@ class TrackPlayer {
         this.resetProgress();
 
         console.log(`[Renderer] Sending 'mpvPlay' command for track: ${musicItem.title}`, { url: mediaSource.url });
-        messageBus.sendCommand('mpvPlay', { url: mediaSource.url });
+        messageBus.sendCommand("mpvPlay", { url: mediaSource.url });
 
         if (options.seekTo >= 0) {
-            setTimeout(() => messageBus.sendCommand('mpvSeek', options.seekTo), 200);
+            setTimeout(() => messageBus.sendCommand("mpvSeek", options.seekTo), 200);
         }
 
         if (options.autoPlay) {
             this.setPlayerState(PlayerState.Playing);
         } else {
             setTimeout(() => {
-                messageBus.sendCommand('mpvTogglePause');
+                messageBus.sendCommand("mpvTogglePause");
             }, 100);
             this.setPlayerState(PlayerState.Paused);
         }

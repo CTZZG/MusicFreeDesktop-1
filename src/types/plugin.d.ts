@@ -137,6 +137,20 @@ declare namespace IPlugin {
     ) => Promise<ICommon.PaginationResponse<IMusic.IMusicSheetItem>>;
     /** 歌曲评论 */
     getMusicComments?: (musicItem: IMusic.IMusicItem, page?: number) => Promise<IGetCommentResult>
+    /**
+     * [可选] 播放状态回调函数
+     * 当播放状态改变时由应用调用，用于插件上报播放进度等。
+     * @param event - 事件名: 'play', 'pause', 'stop', 'progress', 'track-change'
+     * @param data - 事件数据，包含 musicItem, currentTime, duration 等
+     */
+    onPlaybackStateChange?: (
+      event: 'play' | 'pause' | 'stop' | 'progress' | 'track-change',
+      data: {
+          musicItem: IMusic.IMusicItem,
+          currentTime?: number,
+          duration?: number
+      }
+  ) => Promise<void>;
   }
 
   export interface IPluginInstance extends IPluginDefine {

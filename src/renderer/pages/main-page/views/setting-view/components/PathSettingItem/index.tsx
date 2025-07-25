@@ -31,13 +31,13 @@ export default function PathSettingItem<T extends keyof IAppConfig>(
                     onClick={async () => {
                         const result = await dialogUtil.showOpenDialog({
                             title: t("settings.choose_path"),
-                            defaultPath: value as string,
-                            properties: ["openDirectory"],
+                            defaultPath: (value as string) || "",
+                            properties: ["openFile"],
                             buttonLabel: t("common.confirm"),
                         });
-                        if (!result.canceled) {
+                        if (!result.canceled && result.filePaths.length > 0) {
                             AppConfig.setConfig({
-                                [keyPath]: result.filePaths[0]! as any,
+                                [keyPath]: result.filePaths[0] as any,
                             });
                         }
                     }}

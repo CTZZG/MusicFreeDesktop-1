@@ -87,7 +87,7 @@ function onCommand<K extends keyof ICommand>(
 }
 
 function sendCommand<K extends keyof ICommand>(command: K, data: ICommand[K]) {
-  ipcRenderer.send("@shared/message-bus/command", { command, data });
+    ipcRenderer.send("@shared/message-bus/command", { command, data });
 }
 
 function syncAppState(appState: IAppState, to?: "main" | number) {

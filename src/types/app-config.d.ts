@@ -22,6 +22,8 @@ interface _IAppConfig {
     "playMusic.audioOutputDevice": MediaDeviceInfo | null;
     /** 设备变化时 */
     "playMusic.whenDeviceRemoved": "pause" | "play";
+    /** 自定义 mpv 路径 */
+    "playMusic.mpvPath": string | null;
 
     /** [darwin only] 显示状态栏歌词 */
     "lyric.enableStatusBarLyric": boolean;

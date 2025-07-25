@@ -9,6 +9,7 @@ const _defaultAppConfig: IAppConfig =  {
     "playMusic.caseSensitiveInSearch": false,
     "playMusic.playError": "skip",
     "playMusic.whenDeviceRemoved": "play",
+    "playMusic.mpvPath": null,
     "normal.taskbarThumb": "window",
     "normal.closeBehavior": "minimize",
     "normal.checkUpdate": true,

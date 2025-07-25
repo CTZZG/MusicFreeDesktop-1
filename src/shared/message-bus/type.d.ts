@@ -41,8 +41,8 @@ export interface ICommand {
   ToggleMainWindowVisible: void;
 
   // [新增] MPV 相关命令
-  mpvLoad: { url: string }; // [新增] 预加载一个 url 但不播放
-  mpvPlay: { url: string };
+  mpvLoad: { url: string; seekTime?: number; };
+  mpvPlay: { url: string; seekTime?: number; };
   mpvTogglePause: void;
   mpvSeek: number;
   mpvSetVolume: number;

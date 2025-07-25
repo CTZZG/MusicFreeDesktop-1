@@ -43,11 +43,11 @@ class MessageBus {
                 ...data,
             };
             this.ee.emit("stateChanged", this.appState, data);
-        })
+        });
 
         ipcMain.on("@shared/message-bus/command", (_, { command, data }) => {
             this.commandEE.emit(command, data);
-        })
+        });
     }
 
     public onAppStateChange(cb: (state: IAppState, changedAppState: IAppState) => void) {
@@ -72,7 +72,7 @@ class MessageBus {
                 payload: {
                     patch,
                 },
-                timestamp: Date.now()
+                timestamp: Date.now(),
             });
         }
     }

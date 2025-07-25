@@ -1,6 +1,7 @@
 import "./index.scss";
 import RadioGroupSettingItem from "../../components/RadioGroupSettingItem";
 import CheckBoxSettingItem from "../../components/CheckBoxSettingItem";
+import PathSettingItem from "../../components/PathSettingItem";
 import { useOutputAudioDevices } from "@/hooks/useMediaDevices";
 import ListBoxSettingItem from "../../components/ListBoxSettingItem";
 import trackPlayer from "@renderer/core/track-player";
@@ -89,6 +90,11 @@ export default function PlayMusic() {
                 }}
                 options={["pause", "play"]}
             ></RadioGroupSettingItem>
+
+            <PathSettingItem
+                keyPath="playMusic.mpvPath"
+                label={t("settings.play_music.mpv_path", "MPV 路径")}
+            ></PathSettingItem>
         </div>
     );
 }

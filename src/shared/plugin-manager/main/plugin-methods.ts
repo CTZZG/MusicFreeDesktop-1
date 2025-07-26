@@ -489,4 +489,19 @@ export default class PluginMethods implements IPlugin.IPluginInstanceMethods {
             };
         }
     }
+
+    async onPlaybackStateChange(
+        event: "play" | "pause" | "stop" | "progress" | "track-change",
+        data: {
+            musicItem: IMusic.IMusicItem,
+            currentTime?: number,
+            duration?: number
+        },
+    ): Promise<void> {
+        try {
+            await this.plugin.instance?.onPlaybackStateChange?.(event, data);
+        } catch (e) {
+            console.error("onPlaybackStateChange failed", e);
+        }
+    }
 }

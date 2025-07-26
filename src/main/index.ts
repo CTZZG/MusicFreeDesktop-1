@@ -304,6 +304,21 @@ function setupPlayerHandlers() {
     messageBus.onCommand("mpvSetLoop", (enable) => mpvController.setLoop(enable));
     messageBus.onCommand("mpvStop", () => mpvController.stop());
 
+    messageBus.onCommand("playbackStateChanged", ({ event, data }) => {
+        const { musicItem } = data;
+        if (musicItem?.platform) {
+            const plugin = PluginManager.plugins.find(p => p.name === musicItem.platform);
+            if (plugin) {
+                PluginManager.callPluginMethod({
+                    hash: plugin.hash,
+                    platform: musicItem.platform,
+                    method: "onPlaybackStateChange",
+                    args: [event, data],
+                });
+            }
+        }
+    });
+
     // 监听 MpvController 的事件，并广播到所有渲染进程
     mpvController.on("state-change", (state) => messageBus.sendCommand("appStatePatch", { playerState: state }));
     mpvController.on("progress-update", (progress) => {

@@ -36,7 +36,7 @@ class PluginManager {
 
     private inited = false;
 
-    private _plugins: Plugin[] = [];
+    public _plugins: Plugin[] = [];
     public get plugins() {
         return this._plugins;
     }
@@ -133,7 +133,7 @@ class PluginManager {
     }
 
     // 调用某个插件的方法
-    private callPluginMethod({
+    public callPluginMethod({
         hash,
         platform,
         method,

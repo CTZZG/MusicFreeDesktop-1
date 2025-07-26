@@ -167,14 +167,10 @@ class TrackPlayer {
 
         this.ee.on(PlayerEvents.MusicChanged, (musicItem) => {
             if (this.previousMusicItem && this.previousMusicItem.platform) {
-                if (PluginManager.isSupportFeatureMethod(this.previousMusicItem.platform, "onPlaybackStateChange")) {
-                    PluginManager.callPluginDelegateMethod(
-                        this.previousMusicItem,
-                        "onPlaybackStateChange",
-                        "track-change",
-                        { musicItem: this.previousMusicItem },
-                    );
-                }
+                messageBus.sendCommand("playbackStateChanged", {
+                    event: "track-change",
+                    data: { musicItem: this.previousMusicItem },
+                });
             }
         });
 
@@ -182,20 +178,16 @@ class TrackPlayer {
             const musicItem = this.currentMusic;
             if (!musicItem || !musicItem.platform) return;
 
-            if (PluginManager.isSupportFeatureMethod(musicItem.platform, "onPlaybackStateChange")) {
-                let eventType: "play" | "pause" | "stop" | null = null;
-                if (state === PlayerState.Playing) eventType = "play";
-                else if (state === PlayerState.Paused) eventType = "pause";
-                else if (state === PlayerState.None) eventType = "stop";
+            let eventType: "play" | "pause" | "stop" | null = null;
+            if (state === PlayerState.Playing) eventType = "play";
+            else if (state === PlayerState.Paused) eventType = "pause";
+            else if (state === PlayerState.None) eventType = "stop";
 
-                if (eventType) {
-                    PluginManager.callPluginDelegateMethod(
-                        musicItem,
-                        "onPlaybackStateChange",
-                        eventType,
-                        { musicItem },
-                    );
-                }
+            if (eventType) {
+                messageBus.sendCommand("playbackStateChanged", {
+                    event: eventType,
+                    data: { musicItem },
+                });
             }
         });
 
@@ -203,18 +195,14 @@ class TrackPlayer {
             const musicItem = this.currentMusic;
             if (!musicItem || !musicItem.platform) return;
 
-            if (PluginManager.isSupportFeatureMethod(musicItem.platform, "onPlaybackStateChange")) {
-                PluginManager.callPluginDelegateMethod(
+            messageBus.sendCommand("playbackStateChanged", {
+                event: "progress",
+                data: {
                     musicItem,
-                    "onPlaybackStateChange",
-                    "progress",
-                    { 
-                        musicItem,
-                        currentTime: progress.currentTime,
-                        duration: progress.duration,
-                    },
-                );
-            }
+                    currentTime: progress.currentTime,
+                    duration: progress.duration,
+                },
+            });
         });
     }
 
@@ -431,9 +419,17 @@ class TrackPlayer {
         if (!musicItem) {
             return;
         }
+    
+        if (typeof musicItem._currentTime === "number" && musicItem._currentTime > 0) {
+            console.log(`[MF-Desktop] Detected musicItem._currentTime: ${musicItem._currentTime}. Preparing to play from specific time.`);
+            options = {
+                ...options,
+                seekTo: musicItem._currentTime,
+            };
+        }
+    
         const queueIndex = this.findMusicIndex(musicItem);
         if (queueIndex === -1) {
-            // TODO: 用add代替
             const newQueue = [
                 ...this.musicQueue,
                 {
@@ -459,7 +455,12 @@ class TrackPlayer {
         }
         musicItem = musicItem ?? musicList[0];
         this.setMusicQueue(musicList);
-        await this.playMusic(musicItem);
+        
+        const options: IPlayOptions = {};
+        if (musicItem._currentTime > 0) {
+            options.seekTo = musicItem._currentTime;
+        }
+        await this.playMusic(musicItem, options);
     }
 
     public skipToPrev() {

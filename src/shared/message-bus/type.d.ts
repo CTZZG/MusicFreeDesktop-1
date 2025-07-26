@@ -52,6 +52,14 @@ export interface ICommand {
   mpvTimeUpdate: { currentTime: number, duration: number }; // 主进程通知渲染进程时间更新
   appStatePatch: IAppState; // [新增] 用于同步主进程状态补丁到渲染进程
   mpvSetLoop: boolean; // [新增] 设置是否循环播放
+  playbackStateChanged: {
+    event: 'play' | 'pause' | 'stop' | 'progress' | 'track-change',
+    data: {
+        musicItem: IMusic.IMusicItem,
+        currentTime?: number,
+        duration?: number
+    }
+  };
 }
 
 // 内部使用的消息

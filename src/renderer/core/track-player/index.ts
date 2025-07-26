@@ -886,12 +886,10 @@ class TrackPlayer {
     }) {
         this.resetProgress();
 
-        console.log(`[Renderer] Sending 'mpvPlay' command for track: ${musicItem.title}`, { url: mediaSource.url });
-        messageBus.sendCommand("mpvPlay", { url: mediaSource.url });
-
-        if (options.seekTo >= 0) {
-            setTimeout(() => messageBus.sendCommand("mpvSeek", options.seekTo), 200);
-        }
+        messageBus.sendCommand("mpvPlay", { 
+            url: mediaSource.url,
+            seekTime: options.seekTo, 
+        });
 
         if (options.autoPlay) {
             this.setPlayerState(PlayerState.Playing);
